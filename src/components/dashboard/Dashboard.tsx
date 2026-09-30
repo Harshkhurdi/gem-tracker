@@ -1,0 +1,1084 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import type { DashboardData, Tender } from "@/types/tender";
+
+const brands = [
+  "Samsung Healthcare",
+  "Hamilton Medical",
+  "KARL STORZ",
+  "LINET",
+  "Medcaptain",
+  "Spacelabs Healthcare",
+  "Skanray",
+];
+const statusNames: Record<string, string> = {
+  ACTIVE_VERIFIED: "Active · verified",
+  ACTIVE_LIKELY: "Active · likely",
+  DEADLINE_UNKNOWN: "Deadline unknown",
+  EXPIRED: "Expired",
+  CANCELLED: "Cancelled",
+  WITHDRAWN: "Withdrawn",
+};
+const dateFormatter = new Intl.DateTimeFormat("en-IN", {
+  timeZone: "Asia/Kolkata",
+  day: "2-digit",
+  month: "short",
+  year: "numeric",
+});
+const timeFormatter = new Intl.DateTimeFormat("en-IN", {
+  timeZone: "Asia/Kolkata",
+  day: "2-digit",
+  month: "short",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+});
+function date(value?: string | null, time = false) {
+  if (!value) return "Not available";
+  const d = new Date(value);
+  return Number.isNaN(d.getTime())
+    ? "Not available"
+    : (time ? timeFormatter : dateFormatter).format(d);
+}
+function daysUntil(value?: string) {
+  if (!value) return null;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return null;
+  const parts = (v: Date) =>
+    new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Kolkata",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(v);
+  const day = (v: Date) => {
+    const p = parts(v);
+    return Date.UTC(
+      Number(p.find((x) => x.type === "year")?.value),
+      Number(p.find((x) => x.type === "month")?.value) - 1,
+      Number(p.find((x) => x.type === "day")?.value),
+    );
+  };
+  return Math.round((day(d) - day(new Date())) / 86400000);
+}
+function active(t: Tender) {
+  return t.status === "ACTIVE_VERIFIED" || t.status === "ACTIVE_LIKELY";
+}
+function label(value: string) {
+  return value
+    .toLowerCase()
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+function safeUrl(value?: string) {
+  if (!value) return undefined;
+  if (value.startsWith("/api/documents/")) return value;
+  try {
+    const u = new URL(value);
+    return ["https:", "http:"].includes(u.protocol) ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+function ExternalLink({
+  href,
+  children,
+}: {
+  href?: string;
+  children: React.ReactNode;
+}) {
+  const url = safeUrl(href);
+  return url ? (
+    <a href={url} target="_blank" rel="noopener noreferrer">
+      {children}
+      <span aria-hidden="true"> ↗</span>
+    </a>
+  ) : (
+    <span>{children}</span>
+  );
+}
+
+function TenderRows({
+  rows,
+  data,
+}: {
+  rows: Tender[];
+  data: DashboardData | null;
+}) {
+  return (
+    <div className="table-scroll">
+      <table className="tender-table">
+        <thead>
+          <tr>
+            <th>Opportunity</th>
+            <th>Institution / buyer</th>
+            <th>Deadline · IST</th>
+            <th>Status & source</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((t) => (
+            <tr key={t.id}>
+              <td data-label="Opportunity">
+                <ExternalLink href={t.tenderUrl || t.sourceUrl}>
+                  <strong className="tender-title">{t.title}</strong>
+                </ExternalLink>
+                <div className="record-meta">
+                  {t.tenderId || t.referenceNumber || "Reference not provided"}{" "}
+                  · {label(t.procurementScope)}
+                </div>
+                <div className="tag-list">
+                  {t.categories.map((c) => (
+                    <span className="category-tag" key={c}>
+                      {label(c)}
+                    </span>
+                  ))}
+                </div>
+                {t.brandMatches.length > 0 && (
+                  <div className="brand-matches">
+                    {t.brandMatches.map((b) => (
+                      <span
+                        key={`${b.brand}-${b.matchType}`}
+                        className={`match-tag ${b.matchType === "portfolio" ? "" : "explicit"}`}
+                        title={b.matchedTerms.join(", ")}
+                      >
+                        {b.brand} ·{" "}
+                        {b.matchType === "portfolio"
+                          ? "portfolio match"
+                          : b.matchType === "explicit-model"
+                            ? "model named"
+                            : "brand named"}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <details className="record-details">
+                  <summary>Details & documents</summary>
+                  {t.description && <p>{t.description}</p>}
+                  <p>
+                    Published: {date(t.publishDate)} · Checked:{" "}
+                    {date(t.checkedAt, true)} IST
+                  </p>
+                  {t.originalClosingDate && (
+                    <p>
+                      Original deadline: {date(t.originalClosingDate)}
+                      {t.extendedClosingDate
+                        ? ` · Extended: ${date(t.extendedClosingDate)}`
+                        : ""}
+                    </p>
+                  )}
+                  {t.consignees && t.consignees.length > 0 && (
+                    <p>
+                      Consignees: {t.consignees.map((c) => c.name).join(", ")}
+                    </p>
+                  )}
+                  <div className="document-links">
+                    <ExternalLink href={t.tenderUrl || t.sourceUrl}>
+                      Official tender
+                    </ExternalLink>
+                    {t.documents?.map((d, i) => (
+                      <ExternalLink key={i} href={d.url}>
+                        {d.label}
+                      </ExternalLink>
+                    ))}
+                    {t.corrigenda?.map((c, i) => (
+                      <ExternalLink key={`c-${i}`} href={c.url}>
+                        {c.title || c.type || "Corrigendum"}
+                        {c.revisedClosingDate
+                          ? ` · ${date(c.revisedClosingDate)}`
+                          : ""}
+                      </ExternalLink>
+                    ))}
+                    {t.sourceReferences?.map((r, i) => (
+                      <ExternalLink key={`r-${i}`} href={r.url}>
+                        {r.sourceName}
+                      </ExternalLink>
+                    ))}
+                  </div>
+                  {t.notes?.map((n, i) => (
+                    <p className="muted" key={i}>
+                      {n}
+                    </p>
+                  ))}
+                </details>
+              </td>
+              <td data-label="Institution / buyer">
+                <strong>
+                  {t.institutionName ||
+                    (t.institutionId
+                      ? data?.institutions.find((i) => i.id === t.institutionId)
+                          ?.name
+                      : null) ||
+                    t.organisation ||
+                    "Statewide / unassigned buyer"}
+                </strong>
+                <div className="record-meta">
+                  {t.region}
+                  {t.location ? ` · ${t.location}` : ""}
+                </div>
+                {t.buyer && <div className="record-meta">{t.buyer}</div>}
+              </td>
+              <td data-label="Deadline · IST">
+                <strong>
+                  {t.effectiveClosingDate
+                    ? date(t.effectiveClosingDate)
+                    : "Not published"}
+                </strong>
+                {t.datePrecision === "minute" && t.effectiveClosingDate && (
+                  <div className="record-meta">
+                    {date(t.effectiveClosingDate, true)} IST
+                  </div>
+                )}
+                {active(t) && daysUntil(t.effectiveClosingDate) !== null && (
+                  <div
+                    className={`deadline-note ${daysUntil(t.effectiveClosingDate)! <= 3 ? "urgent" : ""}`}
+                  >
+                    {daysUntil(t.effectiveClosingDate) === 0
+                      ? "Closes today"
+                      : daysUntil(t.effectiveClosingDate)! < 0
+                        ? "Past closing date · verify source"
+                        : daysUntil(t.effectiveClosingDate) === 1
+                          ? "Closes tomorrow"
+                          : `Closing in ${daysUntil(t.effectiveClosingDate)} days`}
+                  </div>
+                )}
+              </td>
+              <td data-label="Status & source">
+                <span
+                  className={`status-badge status-${t.status.toLowerCase()}`}
+                >
+                  {statusNames[t.status] || "Unknown status"}
+                </span>
+                <div className="record-meta">
+                  <ExternalLink href={t.sourceUrl}>{t.sourceName}</ExternalLink>
+                </div>
+                {t.stale && (
+                  <span className="stale-label">Cached · stale source</span>
+                )}
+                <div className="record-meta">
+                  {t.verification === "detail"
+                    ? "Detail checked"
+                    : "Listing evidence"}
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+export default function Dashboard() {
+  const [clock, setClock] = useState(0);
+  useEffect(() => {
+    const timer = setInterval(() => setClock(Date.now()), 60000);
+    return () => clearInterval(timer);
+  }, []);
+  const [data, setData] = useState<DashboardData | null>(null);
+  const [busy, setBusy] = useState(true);
+  const [error, setError] = useState("");
+  const [tab, setTab] = useState("opportunities");
+  const [query, setQuery] = useState("");
+  const [region, setRegion] = useState("");
+  const [institution, setInstitution] = useState("");
+  const [scope, setScope] = useState("");
+  const [status, setStatus] = useState("active");
+  const [category, setCategory] = useState("");
+  const [brand, setBrand] = useState("");
+  const [explicit, setExplicit] = useState(false);
+  const [source, setSource] = useState("");
+  const [closing, setClosing] = useState("");
+  const [sort, setSort] = useState("closing");
+  const [token, setToken] = useState("");
+  async function load(force = false) {
+    setBusy(true);
+    setError("");
+    try {
+      const response = await fetch(
+        force ? "/api/refresh" : "/api/tenders",
+        force
+          ? {
+              method: "POST",
+              headers: { Authorization: `Bearer ${token}` },
+              cache: "no-store",
+            }
+          : { cache: "no-store" },
+      );
+      const body = await response.json();
+      if (!response.ok)
+        throw new Error(body.error || `Request failed (${response.status})`);
+      if (
+        !Array.isArray(body.tenders) ||
+        !Array.isArray(body.sources) ||
+        !Array.isArray(body.institutions)
+      )
+        throw new Error("The server returned an invalid dashboard response.");
+      setData(body);
+      setClock(Date.now());
+      if (force) setToken("");
+    } catch (e) {
+      setError(
+        e instanceof Error ? e.message : "Unable to load tender results.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+  useEffect(() => {
+    const controller = new AbortController();
+    // Read cached results only; source retrieval requires an explicit administrator action.
+    fetch("/api/tenders", { cache: "no-store", signal: controller.signal })
+      .then(async (response) => {
+        const body = await response.json();
+        if (!response.ok)
+          throw new Error(body.error || `Request failed (${response.status})`);
+        if (
+          !Array.isArray(body.tenders) ||
+          !Array.isArray(body.sources) ||
+          !Array.isArray(body.institutions)
+        )
+          throw new Error("The server returned an invalid dashboard response.");
+        if (!controller.signal.aborted) {
+          setData(body);
+          setClock(Date.now());
+        }
+      })
+      .catch((e) => {
+        if (!controller.signal.aborted)
+          setError(
+            e instanceof Error ? e.message : "Unable to load tender results.",
+          );
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setBusy(false);
+      });
+    return () => controller.abort();
+  }, []);
+  const tenders = useMemo(
+    () =>
+      (data?.tenders || []).map((t) =>
+        (t.status === "ACTIVE_VERIFIED" || t.status === "ACTIVE_LIKELY") &&
+        t.effectiveClosingDate &&
+        Date.parse(t.effectiveClosingDate) < clock
+          ? { ...t, status: "EXPIRED" as const }
+          : t,
+      ),
+    [data, clock],
+  );
+  const categories = useMemo(
+    () => [...new Set(data?.tenders.flatMap((t) => t.categories) ?? [])].sort(),
+    [data],
+  );
+  const filtered = useMemo(() => {
+    const term = query.trim().toLowerCase();
+    return tenders
+      .filter((t) => {
+        const diff = daysUntil(t.effectiveClosingDate);
+        const explicitMatches = t.brandMatches.filter(
+          (b) => b.matchType !== "portfolio",
+        );
+        const searchable = [
+          t.title,
+          t.description,
+          t.institutionName,
+          t.organisation,
+          t.department,
+          t.buyer,
+          t.location,
+          t.tenderId,
+          t.referenceNumber,
+          t.sourceName,
+          ...t.categories.map(label),
+          ...t.matchedKeywords,
+          ...t.brandMatches.flatMap((b) => [b.brand, ...b.matchedTerms]),
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        return (
+          (!term || searchable.includes(term)) &&
+          (!region || t.region === region) &&
+          (!institution ||
+            t.institutionId === institution ||
+            t.consignees?.some((c) => c.institutionId === institution)) &&
+          (!scope || t.procurementScope === scope) &&
+          (status === "all" ||
+            (status === "active" ? active(t) : t.status === status)) &&
+          (!category ||
+            t.categories.includes(category as (typeof t.categories)[number])) &&
+          (!brand ||
+            t.brandMatches.some(
+              (b) =>
+                b.brand === brand && (!explicit || b.matchType !== "portfolio"),
+            )) &&
+          (!explicit || explicitMatches.length > 0) &&
+          (!source || t.sourceId === source) &&
+          (!closing || (diff !== null && diff >= 0 && diff <= Number(closing)))
+        );
+      })
+      .sort((a, b) =>
+        sort === "newest"
+          ? (Date.parse(b.publishDate || "") || 0) -
+            (Date.parse(a.publishDate || "") || 0)
+          : sort === "relevance"
+            ? b.confidence - a.confidence
+            : (Date.parse(a.effectiveClosingDate || "") || Infinity) -
+              (Date.parse(b.effectiveClosingDate || "") || Infinity),
+      );
+  }, [
+    tenders,
+    query,
+    region,
+    institution,
+    scope,
+    status,
+    category,
+    brand,
+    explicit,
+    source,
+    closing,
+    sort,
+  ]);
+  function reset() {
+    setQuery("");
+    setRegion("");
+    setInstitution("");
+    setScope("");
+    setStatus("active");
+    setCategory("");
+    setBrand("");
+    setExplicit(false);
+    setSource("");
+    setClosing("");
+    setSort("closing");
+  }
+  function selectInstitution(id: string) {
+    reset();
+    setInstitution(id);
+    setTab("opportunities");
+  }
+  const statewide = filtered.filter(
+    (t) => t.procurementScope === "statewide" && !t.institutionId,
+  );
+  const stats = [
+    {
+      name: "Institutions monitored",
+      value: data?.institutions.length ?? "—",
+      detail: `${new Set(data?.institutions.map((i) => i.region) ?? []).size} regions covered`,
+    },
+    {
+      name: "Active opportunities",
+      value: data ? tenders.filter(active).length : "—",
+      detail: `${tenders.filter((t) => t.status === "ACTIVE_VERIFIED").length} verified · ${tenders.filter((t) => t.status === "ACTIVE_LIKELY").length} likely`,
+    },
+    {
+      name: "Closing in 7 days",
+      value: data
+        ? tenders.filter(
+            (t) =>
+              active(t) &&
+              daysUntil(t.effectiveClosingDate) !== null &&
+              daysUntil(t.effectiveClosingDate)! >= 0 &&
+              daysUntil(t.effectiveClosingDate)! <= 7,
+          ).length
+        : "—",
+      detail: "Calendar dates in IST",
+    },
+    {
+      name: "Deadline unknown",
+      value: data?.summary.deadlineUnknown ?? "—",
+      detail: "Requires source verification",
+    },
+  ];
+
+  return (
+    <div className="dashboard">
+      <header className="topbar">
+        <Link href="/" className="wordmark">
+          <span className="logo-mark" aria-hidden="true">
+            t
+          </span>
+          <span>
+            tender<span className="wordmark-light">desk</span>
+            <small>MEDICAL PROCUREMENT INTELLIGENCE</small>
+          </span>
+        </Link>
+        <div className="topbar-note">
+          <span className="live-dot" /> Chandigarh · Punjab · Himachal Pradesh
+        </div>
+      </header>
+      <main>
+        <section className="page-heading">
+          <div>
+            <div className="eyebrow">THE NORTHERN REGION WATCHLIST</div>
+            <h1>Opportunity, in focus.</h1>
+            <p>
+              Government medical equipment tenders across your institution
+              network.
+            </p>
+          </div>
+          <div className="refresh-area">
+            <button
+              className="button-primary"
+              onClick={() => void load()}
+              disabled={busy}
+            >
+              {busy ? "Loading…" : "↻ Refresh results"}
+            </button>
+            <span>
+              Cached results · last source refresh{" "}
+              {date(data?.lastRefreshed, true)}
+              {data?.lastRefreshed ? " IST" : ""}
+            </span>
+          </div>
+        </section>
+        {error && (
+          <div className="error-banner" role="alert">
+            <strong>Results could not be updated.</strong> {error}
+            {data && " Previously loaded results remain visible."}
+            <button onClick={() => void load()} disabled={busy}>
+              Retry
+            </button>
+          </div>
+        )}
+        {!data && busy && (
+          <div className="loading-banner" role="status">
+            Loading cached tender intelligence…
+          </div>
+        )}
+        <section
+          className="stat-grid"
+          aria-label="Coverage and opportunity summary"
+        >
+          {stats.map((s) => (
+            <div className="stat-card" key={s.name}>
+              <span>{s.name}</span>
+              <strong>{s.value}</strong>
+              <small>{s.detail}</small>
+            </div>
+          ))}
+        </section>
+        <div className="coverage-strip">
+          <span>
+            <span className="live-dot" /> Source coverage
+          </span>
+          <strong>
+            {data?.sources.filter((s) => s.status === "SUCCESS").length ?? "—"}{" "}
+            online
+          </strong>
+          <span>
+            {data?.sources.filter((s) => s.status === "PARTIAL").length ?? "—"}{" "}
+            partial
+          </span>
+          <span className="coverage-failed">
+            {data?.sources.filter((s) => s.status === "UNAVAILABLE").length ??
+              "—"}{" "}
+            unavailable
+          </span>
+          <span className="muted">
+            {data?.sources.filter((s) => s.stale).length ?? 0} stale · live
+            access varies by portal
+          </span>
+        </div>
+        <nav className="tabs" aria-label="Dashboard views">
+          {[
+            ["opportunities", "Opportunities", tenders.length],
+            ["institutions", "Institutions", data?.institutions.length ?? 0],
+            ["sources", "Sources & diagnostics", data?.sources.length ?? 0],
+          ].map(([id, name, count]) => (
+            <button
+              key={id}
+              aria-current={tab === id ? "page" : undefined}
+              className={tab === id ? "selected" : ""}
+              onClick={() => setTab(String(id))}
+            >
+              {name}
+              <span>{count}</span>
+            </button>
+          ))}
+        </nav>
+        {tab === "opportunities" && (
+          <>
+            <section className="filter-panel" aria-label="Filter opportunities">
+              <div className="filter-heading">
+                <h2>Find your next opportunity</h2>
+                <button className="text-button" onClick={reset}>
+                  Reset filters
+                </button>
+              </div>
+              <label className="search-label">
+                <span>Search tenders</span>
+                <input
+                  type="search"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Search equipment, institution, brand or tender reference…"
+                />
+              </label>
+              <div className="filter-grid">
+                <label>
+                  Region
+                  <select
+                    value={region}
+                    onChange={(e) => {
+                      setRegion(e.target.value);
+                      setInstitution("");
+                    }}
+                  >
+                    <option value="">All regions</option>
+                    {["Chandigarh", "Punjab", "Himachal Pradesh"].map((v) => (
+                      <option key={v}>{v}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Institution
+                  <select
+                    value={institution}
+                    onChange={(e) => setInstitution(e.target.value)}
+                  >
+                    <option value="">All institutions</option>
+                    {data?.institutions
+                      .filter((i) => !region || i.region === region)
+                      .map((i) => (
+                        <option key={i.id} value={i.id}>
+                          {i.shortName} · {i.city}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+                <label>
+                  Procurement scope
+                  <select
+                    value={scope}
+                    onChange={(e) => setScope(e.target.value)}
+                  >
+                    <option value="">All scopes</option>
+                    {["institution", "multi-institution", "statewide"].map(
+                      (v) => (
+                        <option key={v} value={v}>
+                          {label(v)}
+                        </option>
+                      ),
+                    )}
+                  </select>
+                </label>
+                <label>
+                  Status
+                  <select
+                    value={status}
+                    onChange={(e) => setStatus(e.target.value)}
+                  >
+                    <option value="active">Active opportunities</option>
+                    <option value="all">All statuses</option>
+                    {Object.entries(statusNames).map(([v, n]) => (
+                      <option key={v} value={v}>
+                        {n}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Equipment category
+                  <select
+                    value={category}
+                    onChange={(e) => setCategory(e.target.value)}
+                  >
+                    <option value="">All categories</option>
+                    {categories.map((v) => (
+                      <option key={v} value={v}>
+                        {label(v)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Brand portfolio
+                  <select
+                    value={brand}
+                    onChange={(e) => setBrand(e.target.value)}
+                  >
+                    <option value="">All portfolios</option>
+                    {brands.map((v) => (
+                      <option key={v}>{v}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Source
+                  <select
+                    value={source}
+                    onChange={(e) => setSource(e.target.value)}
+                  >
+                    <option value="">All sources</option>
+                    {data?.sources.map((s) => (
+                      <option key={s.sourceId} value={s.sourceId}>
+                        {s.sourceName}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Closing window
+                  <select
+                    value={closing}
+                    onChange={(e) => setClosing(e.target.value)}
+                  >
+                    <option value="">Any deadline</option>
+                    <option value="0">Closing today</option>
+                    {[3, 7, 14, 30].map((v) => (
+                      <option key={v} value={v}>
+                        Within {v} days
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <div className="filter-foot">
+                <label className="checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={explicit}
+                    onChange={(e) => setExplicit(e.target.checked)}
+                  />{" "}
+                  Explicit brand or model mentions only
+                </label>
+                <span>
+                  Portfolio matches indicate product relevance, not manufacturer
+                  eligibility.
+                </span>
+              </div>
+            </section>
+            <section className="results-panel">
+              <div className="section-heading">
+                <div>
+                  <h2>
+                    Tracked opportunities{" "}
+                    <span className="count-pill">{filtered.length}</span>
+                  </h2>
+                  <p>
+                    {status === "active"
+                      ? "Verified and likely active records."
+                      : "Records matching your filters."}{" "}
+                    Dates shown in Indian Standard Time.
+                  </p>
+                </div>
+                <label className="sort-control">
+                  Sort by
+                  <select
+                    value={sort}
+                    onChange={(e) => setSort(e.target.value)}
+                  >
+                    <option value="closing">Closing soonest</option>
+                    <option value="newest">Newest published</option>
+                    <option value="relevance">Highest relevance</option>
+                  </select>
+                </label>
+              </div>
+              {filtered.length ? (
+                <TenderRows rows={filtered} data={data} />
+              ) : (
+                <div className="empty-state">
+                  <span aria-hidden="true">⌕</span>
+                  <h3>
+                    {data
+                      ? "No opportunities match these filters"
+                      : "No results loaded yet"}
+                  </h3>
+                  <p>
+                    {data
+                      ? "Try another region, include unknown deadlines, or broaden your equipment search. An empty result does not confirm that a source has no tenders."
+                      : "Load cached results to see the latest available records."}
+                  </p>
+                  <button
+                    onClick={data ? reset : () => void load()}
+                    disabled={busy}
+                  >
+                    {data ? "Reset filters" : "Load results"}
+                  </button>
+                </div>
+              )}
+            </section>
+            <details className="statewide-section">
+              <summary>
+                Statewide procurement · {statewide.length} records without an
+                assigned institution
+              </summary>
+              <p>
+                State and central buying bodies may serve multiple institutions.
+                These records are kept separate from direct institution
+                assignments; named consignees remain visible in the details.
+                This section follows the current filters; use the status filter
+                to inspect expired or unknown deadlines.
+              </p>
+              {statewide.length ? (
+                <TenderRows rows={statewide} data={data} />
+              ) : (
+                <p className="muted">
+                  No statewide records in the available data.
+                </p>
+              )}
+            </details>
+          </>
+        )}
+        {tab === "institutions" && (
+          <section>
+            <div className="section-heading">
+              <div>
+                <h2>The institution network</h2>
+                <p>
+                  {data?.institutions.length ?? 0} institutions · counts from
+                  current cached tender records, including named consignees.
+                </p>
+              </div>
+            </div>
+            <div className="institution-grid">
+              {data?.institutions.map((i) => {
+                const records = tenders.filter(
+                  (t) =>
+                    t.institutionId === i.id ||
+                    t.consignees?.some((c) => c.institutionId === i.id),
+                );
+                const sources = data.sources.filter((s) =>
+                  i.sourceIds.includes(s.sourceId),
+                );
+                return (
+                  <article className="institution-card" key={i.id}>
+                    <div className="institution-top">
+                      <span className="region-tag">{i.region}</span>
+                      <span className="muted">
+                        {label(i.operationalStatus)}
+                      </span>
+                    </div>
+                    <h3>{i.shortName}</h3>
+                    <p className="institution-name">{i.name}</p>
+                    <div className="record-meta">
+                      {i.city} · {label(i.institutionType)}
+                    </div>
+                    <div className="institution-counts">
+                      <div>
+                        <strong>{records.filter(active).length}</strong>
+                        <span>Active</span>
+                      </div>
+                      <div>
+                        <strong>
+                          {
+                            records.filter(
+                              (t) => t.status === "DEADLINE_UNKNOWN",
+                            ).length
+                          }
+                        </strong>
+                        <span>Unknown deadline</span>
+                      </div>
+                      <div>
+                        <strong>{records.length}</strong>
+                        <span>Total records</span>
+                      </div>
+                    </div>
+                    <div className="institution-health">
+                      {sources.length ? (
+                        sources.map((s) => (
+                          <span
+                            key={s.sourceId}
+                            title={`${s.sourceName}: ${s.status}${s.stale ? " (stale)" : ""}`}
+                            className={`health-chip health-${s.status.toLowerCase()}`}
+                          >
+                            {s.sourceName} ·{" "}
+                            {s.status === "SUCCESS"
+                              ? "online"
+                              : s.status.toLowerCase()}
+                            {s.stale ? " · stale" : ""}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="muted">
+                          No source result available
+                        </span>
+                      )}
+                    </div>
+                    {i.note && <p className="institution-note">{i.note}</p>}
+                    <div className="institution-actions">
+                      <button
+                        className="text-button"
+                        onClick={() => selectInstitution(i.id)}
+                      >
+                        View opportunities →
+                      </button>
+                      <ExternalLink href={i.officialUrl}>
+                        Official site
+                      </ExternalLink>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+            {!data && <p>No institution data loaded.</p>}
+          </section>
+        )}
+        {tab === "sources" && (
+          <section className="sources-panel">
+            <div className="section-heading">
+              <div>
+                <h2>Source health & traceability</h2>
+                <p>
+                  Successful retrieval does not guarantee complete coverage.
+                  Partial, unavailable and stale sources need review.
+                </p>
+              </div>
+              <a
+                href="/api/diagnostics"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="outline-link"
+              >
+                Open diagnostics JSON ↗
+              </a>
+            </div>
+            <div className="source-grid">
+              {data?.sources.map((s) => (
+                <article key={s.sourceId} className="source-card">
+                  <div className="source-card-top">
+                    <h3>{s.sourceName}</h3>
+                    <span
+                      className={`health-chip health-${s.status.toLowerCase()}`}
+                    >
+                      {s.status}
+                    </span>
+                  </div>
+                  <p className="record-meta">
+                    Attempted {date(s.attemptedAt, true)} IST ·{" "}
+                    {Math.round(s.durationMs / 1000)}s
+                  </p>
+                  <p>
+                    Last successful retrieval:{" "}
+                    <strong>
+                      {date(s.successfulAt, true)}
+                      {s.successfulAt ? " IST" : ""}
+                    </strong>
+                  </p>
+                  {s.stale && (
+                    <p className="stale-label">
+                      Stale cached records · not freshly verified
+                    </p>
+                  )}
+                  {s.error && <p className="source-error">{s.error}</p>}
+                  {s.notes.map((n, j) => (
+                    <p className="muted" key={j}>
+                      {n}
+                    </p>
+                  ))}
+                  <div className="source-metric-row">
+                    <span>
+                      <strong>{s.metrics.rawRecords}</strong> retrieved
+                    </span>
+                    <span>
+                      <strong>{s.metrics.medicalMatches}</strong> medical
+                      matches
+                    </span>
+                    <span>
+                      <strong>
+                        {
+                          tenders.filter((t) => t.sourceId === s.sourceId)
+                            .length
+                        }
+                      </strong>{" "}
+                      included
+                    </span>
+                  </div>
+                </article>
+              ))}
+            </div>
+            <details className="diagnostics-details">
+              <summary>Record processing diagnostics</summary>
+              <div className="table-scroll">
+                <table className="diagnostics-table">
+                  <thead>
+                    <tr>
+                      <th>Source</th>
+                      <th>Raw</th>
+                      <th>Institution matches</th>
+                      <th>Medical matches</th>
+                      <th>False positives rejected</th>
+                      <th>Unassigned rejected</th>
+                      <th>Detail checks</th>
+                      <th>Included records</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data?.sources.map((s) => (
+                      <tr key={s.sourceId}>
+                        <td>{s.sourceName}</td>
+                        <td>{s.metrics.rawRecords}</td>
+                        <td>{s.metrics.institutionMatches}</td>
+                        <td>{s.metrics.medicalMatches}</td>
+                        <td>{s.metrics.falsePositivesRejected}</td>
+                        <td>{s.metrics.unassignedRejected}</td>
+                        <td>{s.metrics.detailChecks}</td>
+                        <td>
+                          {
+                            tenders.filter((t) => t.sourceId === s.sourceId)
+                              .length
+                          }
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p>
+                Included records are computed from the final dataset after
+                normalization and deduplication. Source processing counts may
+                overlap. Duplicates removed:{" "}
+                {data?.summary.duplicatesRemoved ?? "—"}.
+              </p>
+            </details>
+            <details className="admin-panel">
+              <summary>Administrator source refresh</summary>
+              <p>
+                Refresh results reads the existing cache. This action performs a
+                new source retrieval and requires an administrator token.
+              </p>
+              {data?.refreshEnabled ? (
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    void load(true);
+                  }}
+                >
+                  <label>
+                    Administrator token
+                    <input
+                      type="password"
+                      autoComplete="off"
+                      value={token}
+                      onChange={(e) => setToken(e.target.value)}
+                      placeholder="Enter refresh token"
+                      required
+                    />
+                  </label>
+                  <button className="button-primary" disabled={busy || !token}>
+                    {busy ? "Refreshing sources…" : "Refresh sources"}
+                  </button>
+                </form>
+              ) : (
+                <p className="muted">
+                  Source refresh is not enabled on this deployment.
+                </p>
+              )}
+            </details>
+          </section>
+        )}
+      </main>
+      <footer>
+        <span>tenderdesk · Government medical procurement</span>
+        <span>
+          Always verify deadlines, eligibility and corrigenda on the official
+          tender portal.
+        </span>
+      </footer>
+    </div>
+  );
+}
