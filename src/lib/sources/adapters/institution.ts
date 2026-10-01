@@ -194,7 +194,12 @@ export function applyInstitutionDocument(
     );
     return;
   }
-  record.description = text.slice(0, 12000);
+  const description = text
+    .split(/\r?\n/)
+    .filter((line) => !/^\s*(?:--\s*\d+\s+of\s+\d+\s*--|page\s+\d+(?:\s+of\s+\d+)?)\s*$/i.test(line))
+    .join("\n")
+    .trim();
+  if (description) record.description = description.slice(0, 12000);
   record.sourceReferences = [
     {
       sourceId: record.sourceId,

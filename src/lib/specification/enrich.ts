@@ -15,7 +15,10 @@ import {
 } from "../config/priority-equipment";
 import { assignInstitutions } from "../tender/institution-matcher";
 import { classifyMedical } from "../tender/classifier";
-import { extractSubmissionDeadline } from "../tender/deadline";
+import {
+  extractSubmissionDeadline,
+  hasSubmissionDeadlineLabel,
+} from "../tender/deadline";
 import { extractSpecifications } from "./extract";
 import { documentType, fetchDocument, linkedDocuments } from "./documents";
 
@@ -33,6 +36,30 @@ export function documentIdentityMatches(raw: RawTender, text: string): boolean {
     !raw.tenderId || !ids.length || ids.includes(raw.tenderId.toUpperCase())
   );
 }
+/** Later amendments without a submission field do not undo a prior extension. */
+export function latestAmendmentDeadline(documents: ParsedDocument[]) {
+  const candidates = documents.flatMap((d) => {
+    if (d.type !== "corrigendum" || d.status !== "parsed") return [];
+    const text = d.pages.map((p) => p.text).join("\n");
+    if (!hasSubmissionDeadlineLabel(text)) return [];
+    const deadline = extractSubmissionDeadline(text);
+    const published = Date.parse(d.publishedDate || "");
+    return [{ deadline, published }];
+  });
+  const dated = candidates.filter((c) => Number.isFinite(c.published));
+  const latest = Math.max(...dated.map((c) => c.published));
+  // Undated deadline changes have no defensible order relative to dated ones.
+  const authoritative = candidates.filter(
+    (c) => !Number.isFinite(c.published) || c.published === latest,
+  );
+  if (
+    authoritative.some((c) => !c.deadline) ||
+    new Set(authoritative.map((c) => Date.parse(c.deadline!.date))).size !== 1
+  )
+    return;
+  return authoritative[0]?.deadline;
+}
+
 export async function inspectPriorityTender(
   raw: RawTender,
   http: SourceHttp,
@@ -186,24 +213,9 @@ export async function inspectPriorityTender(
   }
   raw.specification = extractSpecifications(documents, categories);
   // Apply only labelled submission fields, with amendment precedence and identity guard.
-  const amendments = documents
-    .filter((d) => d.type === "corrigendum" && d.status === "parsed")
-    .sort(
-      (a, b) =>
-        Date.parse(b.publishedDate || "0") - Date.parse(a.publishedDate || "0"),
-    );
-  const dated = amendments.filter((d) => d.publishedDate);
-  const correction =
-    dated[0] || (amendments.length === 1 ? amendments[0] : undefined);
-  if (correction) {
-    const deadline = extractSubmissionDeadline(
-      correction.pages.map((p) => p.text).join("\n"),
-    );
-    if (
-      deadline &&
-      (!raw.publishDate ||
-        Date.parse(deadline.date) >= Date.parse(raw.publishDate))
-    ) {
+  const deadline = latestAmendmentDeadline(documents);
+  if (deadline) {
+    if (!raw.publishDate || Date.parse(deadline.date) >= Date.parse(raw.publishDate)) {
       raw.extendedClosingDate = deadline.date;
       raw.datePrecision = deadline.datePrecision;
       raw.verification = "listing";

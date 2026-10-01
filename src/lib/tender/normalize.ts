@@ -112,7 +112,7 @@ export function buildDashboard(
       if (
         !classifyMedical(
           [raw.title, raw.description].filter(Boolean).join("\n"),
-          raw.title,
+          raw.documentProductScope || raw.title,
           raw,
         ).isMedical
       ) {

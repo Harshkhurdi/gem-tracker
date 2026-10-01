@@ -21,6 +21,7 @@ import {
   documentIdentityMatches,
   linkRetenders,
   inspectPriorityTender,
+  latestAmendmentDeadline,
 } from "../src/lib/specification/enrich";
 import {
   parseXlsx,
@@ -631,4 +632,54 @@ it("does not erase unrelated clauses when an amendment's field is ambiguous", ()
   expect(result.sections.technicalRequirements).toHaveLength(3);
   expect(result.extractionStatus).toBe("partial");
   expect(result.notes.join()).toContain("precedence requires official review");
+});
+
+
+describe("document discovery and amendment deadline regressions", () => {
+  it("retains distinct document URLs with the same display label", () => {
+    const links = linkedDocuments('<a href="/first.pdf">Download</a><a href="/second.pdf">Download</a><a href="/first.pdf">Duplicate</a>', "https://www.aiimsbathinda.edu.in/");
+    expect(links.map((d) => d.url)).toEqual([
+      "https://www.aiimsbathinda.edu.in/first.pdf",
+      "https://www.aiimsbathinda.edu.in/second.pdf",
+    ]);
+  });
+  const amendment = (text: string, publishedDate?: string) => doc(text, {
+    type: "corrigendum", publishedDate,
+  });
+  it("keeps an extension when a later amendment changes only technical terms", () => {
+    expect(latestAmendmentDeadline([
+      amendment("Revised Closing Date: 20-Oct-2026 15:00", "2026-10-02"),
+      amendment("Battery runtime amended: read as 120 minutes", "2026-10-03"),
+    ])?.date).toBe("2026-10-20T15:00:00+05:30");
+  });
+  it("uses the latest dated deadline even when dates arrive out of order", () => {
+    expect(latestAmendmentDeadline([
+      amendment("Closing Date: 22-Oct-2026", "2026-10-03"),
+      amendment("Closing Date: 20-Oct-2026", "2026-10-02"),
+    ])?.date).toBe("2026-10-22T23:59:59+05:30");
+  });
+  it("does not guess precedence for conflicting undated or same-date changes", () => {
+    for (const date of [undefined, "2026-10-02"]) {
+      expect(latestAmendmentDeadline([
+        amendment("Closing Date: 20-Oct-2026", "2026-10-02"),
+        amendment("Closing Date: 22-Oct-2026", date),
+      ])).toBeUndefined();
+    }
+  });
+});
+
+
+it("does not revive an earlier extension when the latest deadline change is ambiguous", () => {
+  expect(latestAmendmentDeadline([
+    doc("Closing Date: 20-Oct-2026", { type: "corrigendum", publishedDate: "2026-10-02" }),
+    doc("Closing Date: 22-Oct-2026\nBid End Date: 23-Oct-2026", { type: "corrigendum", publishedDate: "2026-10-03" }),
+  ])).toBeUndefined();
+});
+
+
+it("does not treat a warranty-only amendment as a submission date change", () => {
+  expect(latestAmendmentDeadline([
+    doc("Closing Date: 20-Oct-2026", { type: "corrigendum", publishedDate: "2026-10-02" }),
+    doc("Warranty End Date: 22-Oct-2027", { type: "corrigendum", publishedDate: "2026-10-03" }),
+  ])?.date).toBe("2026-10-20T23:59:59+05:30");
 });

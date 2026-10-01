@@ -48,6 +48,12 @@ describe("Explicit submission deadline extraction", () => {
         extractSubmissionDeadline(`${label}: 01-Oct-2026 03:00 PM`)?.date,
       ).toBe("2026-10-01T15:00:00+05:30"),
     );
+  it("preserves AM/PM on a separately labelled submission time", () => {
+    expect(extractSubmissionDeadline("Closing Date: 01-Oct-2026, Time: 03:00 PM")?.date)
+      .toBe("2026-10-01T15:00:00+05:30");
+    expect(extractSubmissionDeadline("Closing Date: 01-Oct-2026, Time: 12:00 AM")?.date)
+      .toBe("2026-10-01T00:00:00+05:30");
+  });
   it("reads multiline bilingual GeM fields", () =>
     expect(
       extractSubmissionDeadline(
@@ -94,4 +100,13 @@ it("sanitizes status errors without returning appended private details", () => {
   expect(sanitizeError(new Error("HTTP 502 private upstream secret"))).toBe(
     "Official source HTTP 502",
   );
+});
+
+
+it("does not substitute contractual dates for submission deadlines", () => {
+  for (const label of ["Warranty End Date", "Warranty Period End Date", "Guarantee Period End Date", "CMC End Date", "AMC End Date", "Contract End Date", "Payment Due Date", "Delivery Due Date"]) {
+    expect(extractSubmissionDeadline(`${label}: 01-Oct-2027`)).toBeUndefined();
+    expect(extractSubmissionDeadline(`${label}: 01-Oct-2027\nBid End Date: 01-Oct-2026`)?.date)
+      .toBe("2026-10-01T23:59:59+05:30");
+  }
 });

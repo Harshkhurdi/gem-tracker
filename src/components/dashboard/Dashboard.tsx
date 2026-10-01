@@ -12,6 +12,7 @@ import {
   isActive as active,
   filterAndSortTenders,
   refreshElapsedStatuses,
+  contributesToSource,
 } from "@/lib/tender/dashboard-filter";
 
 const statusNames: Record<string, string> = {
@@ -1017,7 +1018,9 @@ export default function Dashboard() {
                     <span>
                       <strong>
                         {
-                          tenders.filter((t) => t.sourceId === s.sourceId)
+                          tenders.filter((t) =>
+                            contributesToSource(t, s.sourceId),
+                          )
                             .length
                         }
                       </strong>{" "}
@@ -1055,7 +1058,9 @@ export default function Dashboard() {
                         <td>{s.metrics.detailChecks}</td>
                         <td>
                           {
-                            tenders.filter((t) => t.sourceId === s.sourceId)
+                            tenders.filter((t) =>
+                              contributesToSource(t, s.sourceId),
+                            )
                               .length
                           }
                         </td>

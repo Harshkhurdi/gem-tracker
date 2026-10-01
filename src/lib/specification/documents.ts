@@ -50,7 +50,7 @@ export function linkedDocuments(
     )
       found.push({ label, url });
   });
-  return [...new Map(found.map((d) => [d.label, d])).values()];
+  return [...new Map(found.map((d) => [d.url, d])).values()];
 }
 // Inspect ZIP directory first, bounding expansion before any XML is parsed.
 export function validateXlsx(bytes: Uint8Array): void {

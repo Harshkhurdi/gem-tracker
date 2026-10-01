@@ -3,9 +3,11 @@ import type { Brand, Tender } from "../src/types/tender";
 import { classifyMedical, matchBrands } from "../src/lib/tender/classifier";
 import { BRAND_PORTFOLIOS } from "../src/lib/config/brand-portfolios";
 import { closingDeadlineTimestamp } from "../src/lib/tender/dates";
+import { deduplicate } from "../src/lib/tender/dedupe";
 import { resolveStatus } from "../src/lib/tender/status";
 import {
   filterAndSortTenders,
+  contributesToSource,
   refreshElapsedStatuses,
   daysUntilClosing,
   type DashboardFilters,
@@ -216,5 +218,36 @@ describe("deadline and client freshness transitions", () => {
     expect(
       refreshElapsedStatuses([{ ...t, status: "CANCELLED" }], now)[0].status,
     ).toBe("CANCELLED");
+  });
+});
+
+describe("source health counts after mirror deduplication", () => {
+  it("includes the retained row for each contributing source exactly once", () => {
+    const primary = {
+      ...tender("Samsung ultrasound"),
+      sourceId: "primary",
+      tenderId: "GEM/2026/B/1234567",
+    };
+    const secondary = {
+      ...primary,
+      id: "secondary-row",
+      sourceId: "secondary",
+      sourceName: "Official mirror",
+      sourceUrl: "https://example.gov.in/notice",
+    };
+    const { tenders: rows, duplicatesRemoved } = deduplicate([
+      primary,
+      secondary,
+    ]);
+    expect(duplicatesRemoved).toBe(1);
+    expect(rows).toHaveLength(1);
+    for (const source of ["primary", "secondary"]) {
+      const included = rows.filter((t) => contributesToSource(t, source));
+      expect(included).toHaveLength(1);
+      expect(included).toEqual(
+        filterAndSortTenders(rows, { ...filters, source }, now),
+      );
+    }
+    expect(rows.filter((t) => contributesToSource(t, "unrelated"))).toEqual([]);
   });
 });

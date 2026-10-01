@@ -126,3 +126,12 @@ describe("reviewed scanned document evidence", () => {
     ).toBeUndefined();
   });
 });
+
+
+it("ignores PDF pagination noise while retaining actual document text", () => {
+  const r = bathinda("13-10-2026");
+  applyInstitutionDocument(r, "-- 1 of 5 --\n-- 2 of 5 --", "https://www.aiimsbathinda.edu.in/doc.pdf");
+  expect(r.description).toBeUndefined();
+  applyInstitutionDocument(r, "-- 1 of 5 --\nSupply of DVT Pumps\nPage 2 of 5", "https://www.aiimsbathinda.edu.in/doc.pdf");
+  expect(r.description).toBe("Supply of DVT Pumps");
+});

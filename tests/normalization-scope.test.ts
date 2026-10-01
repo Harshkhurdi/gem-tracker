@@ -51,3 +51,24 @@ describe("normalization uses procurement title for conservative scope decisions"
     expect(dashboard.summary.falsePositivesRejected).toBe(2);
   });
 });
+
+
+it("retains generic procurements with inspected official item scope through the dashboard", () => {
+  const generic = {
+    ...raw("Procurement of ICU equipment"),
+    tenderCategory: "Works",
+    description: "Item description: ICU ventilator | Quantity: 10",
+    documentProductScope: "Item description: ICU ventilator | Quantity: 10",
+  };
+  expect(normalizeTender(generic, false, now)?.priorityCategories).toContain("VENTILATORS");
+  const source: SourceFetchResult = {
+    sourceId: "test", sourceName: "test", status: "SUCCESS", records: [generic],
+    attemptedAt: now.toISOString(), notes: [], durationMs: 1,
+    metrics: { rawRecords: 1, institutionMatches: 0, medicalMatches: 0,
+      falsePositivesRejected: 0, unassignedRejected: 0, detailChecks: 1 },
+  };
+  const dashboard = buildDashboard([source], false, now);
+  expect(dashboard.tenders).toHaveLength(1);
+  expect(dashboard.sources[0].metrics.medicalMatches).toBe(1);
+  expect(dashboard.summary.falsePositivesRejected).toBe(0);
+});

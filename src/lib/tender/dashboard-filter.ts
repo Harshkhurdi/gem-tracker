@@ -51,6 +51,12 @@ export function daysUntilClosing(
     Math.floor((timestamp + 330 * 60000) / 86400000);
   return istDay(deadline) - istDay(now);
 }
+export function contributesToSource(t: Tender, sourceId: string): boolean {
+  return (
+    t.sourceId === sourceId ||
+    !!t.sourceReferences?.some((ref) => ref.sourceId === sourceId)
+  );
+}
 export function hasPriorityPortfolio(t: Tender) {
   return t.brandMatches.some((m) => PRIORITY_BRANDS.includes(m.brand));
 }
@@ -114,9 +120,7 @@ export function filterAndSortTenders(
         (!f.brand || brandMatches.length > 0) &&
         (!f.explicit ||
           brandMatches.some((m) => m.matchType !== "portfolio")) &&
-        (!f.source ||
-          t.sourceId === f.source ||
-          t.sourceReferences?.some((ref) => ref.sourceId === f.source)) &&
+        (!f.source || contributesToSource(t, f.source)) &&
         (!f.closing ||
           (days !== null && days >= 0 && days <= Number(f.closing)))
       );
