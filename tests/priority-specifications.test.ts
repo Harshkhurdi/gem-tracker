@@ -167,7 +167,9 @@ describe("source-backed priority specification extraction", () => {
       ],
       ["VENTILATORS"],
     );
-    expect(result.sections.warranty[0].requirement).toBe("Warranty 2 years");
+    expect(result.sections.warranty.map((item) => item.requirement)).toEqual([
+      "Warranty 2 years",
+    ]);
     expect(result.sections.cmc[0].requirement).toBe(
       "CMC 8 years after warranty",
     );
@@ -514,6 +516,26 @@ describe("priority extraction regressions found in the live audit", () => {
 });
 
 describe("reviewed official scans", () => {
+  it("does not present post-warranty maintenance or CMC uptime as equipment warranty", () => {
+    const result = extractSpecifications(
+      [
+        doc(
+          "Technical Specifications\nWarranty of required product: 2 Year\nComprehensive Maintenance Duration (Post Warranty): 8 Year\nCMC shall include calibration and spares, after satisfactory completion of Warranty.\nThere will be 98% uptime warranty during CMC period.",
+        ),
+      ],
+      ["ENDOSCOPY"],
+    );
+    expect(result.sections.warranty.map((item) => item.requirement)).toEqual([
+      "Warranty of required product: 2 Year",
+    ]);
+    expect(result.sections.cmc).toHaveLength(3);
+    expect(
+      result.sections.serviceRequirements.some((item) =>
+        item.requirement.includes("98%"),
+      ),
+    ).toBe(true);
+  });
+
   it("requires both exact URL and matching fresh bytes", () => {
     const d = reviewedScans[0];
     expect(reviewedScanPages(d.url, "changed")).toBeUndefined();
@@ -540,6 +562,18 @@ describe("reviewed official scans", () => {
         i.requirement.includes("98%"),
       ),
     ).toBe(true);
+  });
+  it("retains explicitly stated cleaning-adaptor package quantity", () => {
+    const d = reviewedScans[0];
+    const result = extractSpecifications(
+      [{ ...doc(""), url: d.url, pages: d.pages, textMethod: "reviewed-scan" }],
+      ["ENDOSCOPY"],
+    );
+    const accessory = result.sections.accessories.find((item) =>
+      item.requirement.includes("Package of 10"),
+    );
+    expect(accessory?.quantity).toBe("10");
+    expect(accessory?.sourcePage).toBe(5);
   });
   it("reads visually checked labelled submission times with physical-page provenance", () => {
     const deadlines = reviewedScans.map(

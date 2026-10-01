@@ -227,6 +227,18 @@ export function extractSpecifications(
             : line;
         for (const [section, field, pattern] of rules) {
           if (!pattern.test(text)) continue;
+          // Post-warranty maintenance and uptime guarantees are CMC terms,
+          // not the equipment warranty. Preserve genuinely mixed clauses.
+          if (
+            section === "warranty" &&
+            !pattern.test(
+              text.replace(
+                /(?:post[\s-]*warranty|after\s+(?:satisfactory\s+completion\s+of\s+)?warranty|completion\s+of\s+warranty|uptime\s+warranty)/gi,
+                "",
+              ),
+            )
+          )
+            continue;
           const item: SpecificationItem = {
             field:
               section === "accessories"
@@ -252,6 +264,10 @@ export function extractSpecifications(
           item.quantity ||= text.match(
             /\b(\d+(?:\.\d+)?)\s*(?:units?|nos?\.?|pieces?|sets?)\b/i,
           )?.[1];
+          if (section === "accessories")
+            item.quantity ||= text.match(
+              /\b(?:pack|package)\s+of\s+(\d+)\b/i,
+            )?.[1];
           if (
             doc.type === "corrigendum" &&
             /read as|replac\w*|amend\w*|revis\w*|instead of|changed to/i.test(
