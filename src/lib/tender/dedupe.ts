@@ -89,15 +89,54 @@ export function deduplicate(tenders: Tender[]): {
     const references = [
       ...(best.sourceReferences ?? []),
       ...(other.sourceReferences ?? []),
-      { sourceName: best.sourceName, url: best.tenderUrl || best.sourceUrl },
-      { sourceName: other.sourceName, url: other.tenderUrl || other.sourceUrl },
+      {
+        sourceId: best.sourceId,
+        sourceName: best.sourceName,
+        url: best.tenderUrl || best.sourceUrl,
+      },
+      {
+        sourceId: other.sourceId,
+        sourceName: other.sourceName,
+        url: other.tenderUrl || other.sourceUrl,
+      },
     ];
+    const documents = [...(best.documents ?? []), ...(other.documents ?? [])];
+    const corrigenda = [
+      ...(best.corrigenda ?? []),
+      ...(other.corrigenda ?? []),
+    ];
+    const noticeKey = (c: NonNullable<Tender["corrigenda"]>[number]) =>
+      JSON.stringify([
+        c.url,
+        c.title,
+        c.type,
+        c.publishedDate,
+        c.revisedClosingDate,
+      ]);
     result[index] = {
       ...best,
       description: best.description || other.description,
-      documents: best.documents?.length ? best.documents : other.documents,
+      documents: documents.length
+        ? documents.filter(
+            (d, i) => documents.findIndex((x) => x.url === d.url) === i,
+          )
+        : undefined,
+      // Keep amendment evidence from every mirror, without recomputing the chosen
+      // row's current deadline from potentially older historical notices.
+      corrigenda: corrigenda.length
+        ? corrigenda.filter(
+            (c, i) =>
+              corrigenda.findIndex((x) => noticeKey(x) === noticeKey(c)) === i,
+          )
+        : undefined,
       sourceReferences: references.filter(
-        (r, i) => references.findIndex((x) => x.url === r.url) === i,
+        (r, i) =>
+          references.findIndex(
+            (x) =>
+              x.url === r.url &&
+              x.sourceId === r.sourceId &&
+              x.sourceName === r.sourceName,
+          ) === i,
       ),
     };
   }

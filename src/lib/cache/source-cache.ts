@@ -3,10 +3,9 @@ import { getAdapter, adapters } from "@/lib/sources/registry";
 import { readDurable, writeDurable } from "./redis";
 import type { SourceFetchResult } from "@/types/tender";
 const ttl = 900;
-// Data Cache persists snapshots; these bounded maps only coalesce work, retain a
-// snapshot during revalidation, and stage an authorized forced-cache write.
+// Data Cache persists snapshots; these bounded maps coalesce work and retain a
+// prior snapshot during revalidation.
 const inflight = new Map<string, Promise<SourceFetchResult>>();
-const staged = new Map<string, SourceFetchResult>();
 const previousSnapshots = new Map<string, SourceFetchResult>();
 const readers = new Map<string, () => Promise<SourceFetchResult>>();
 function unavailable(id: string, error: string): SourceFetchResult {
@@ -80,11 +79,10 @@ async function perform(id: string): Promise<SourceFetchResult> {
 function reader(id: string) {
   let fn = readers.get(id);
   if (!fn) {
-    fn = unstable_cache(
-      async () => staged.get(id) || (await perform(id)),
-      ["medical-source-v2", id],
-      { revalidate: ttl, tags: ["tender-source-" + id] },
-    );
+    fn = unstable_cache(async () => perform(id), ["medical-source-v2", id], {
+      revalidate: ttl,
+      tags: ["tender-source-" + id],
+    });
     readers.set(id, fn);
   }
   return fn;
@@ -122,23 +120,14 @@ export async function cachedSource(id: string): Promise<SourceFetchResult> {
     );
   }
 }
-export async function forceSource(id: string): Promise<SourceFetchResult> {
-  const started = Date.now();
-  const previous = await cachedSource(id);
-  // A cold read has just performed a fresh request; do not immediately repeat it.
-  if (Date.parse(previous.attemptedAt) >= started - 1000) return previous;
-  remember(previous);
-  const result = await perform(id);
-  staged.set(id, result);
-  try {
-    revalidateTag("tender-source-" + id, { expire: 0 });
-    await reader(id)();
-  } finally {
-    staged.delete(id);
-  }
-  return result;
+export function invalidateSources(): void {
+  // Next applies Route Handler tag invalidations when that response completes.
+  // Fetch fresh snapshots in a subsequent GET, after this invalidation request
+  // has returned, so its deferred invalidations cannot erase the new writes.
+  for (const adapter of adapters)
+    revalidateTag("tender-source-" + adapter.id, { expire: 0 });
 }
-export async function allSources(force = false) {
+export async function allSources() {
   const ids = adapters.map((a) => a.id);
   let next = 0;
   const results: SourceFetchResult[] = [];
@@ -147,7 +136,7 @@ export async function allSources(force = false) {
       while (next < ids.length) {
         const id = ids[next++];
         try {
-          results.push(await (force ? forceSource(id) : cachedSource(id)));
+          results.push(await cachedSource(id));
         } catch {
           results.push(unavailable(id, "Source request could not complete"));
         }

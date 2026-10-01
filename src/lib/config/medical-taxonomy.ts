@@ -9,18 +9,18 @@ export const MEDICAL_RULES: MedicalRule[] = [
   {
     category: "ULTRASOUND",
     pattern:
-      /\b(?:ultra\s?sound|ultrasonograph\w*|usg|doppler|sonograph\w*)\b/i,
+      /\b(?:ultra\s?sound|ultrasonograph\w*|usg|echo machine\w*|echocardiograph\w*|doppler|sonograph\w*)\b/i,
   },
   {
     category: "XRAY_DR",
     pattern:
-      /\b(?:x[ -]?ray|digital radiograph\w*|radiography|radiographic|dr system|computed radiography)\b/i,
+      /\b(?:GM85(?: Fit)?|GC85|GF85|flat[ -]panel detectors?|x[ -]?ray|digital radiograph\w*|radiography|radiographic|dr system|computed radiography)\b/i,
   },
   { category: "C_ARM", pattern: /\bc[ -]?arm\b/i },
   {
     category: "CT",
     pattern:
-      /\b(?:ct scanner|ct scan|computed tomography|computerized tomography|multislice ct|\d+ ?slice ct)\b/i,
+      /\b(?:BodyTom|OmniTom|(?:mobile|portable) ct|ct scanner|ct scan|computed tomography|computerized tomography|multislice ct|\d+ ?slice ct)\b/i,
   },
   {
     category: "DIAGNOSTIC_IMAGING",
@@ -30,16 +30,17 @@ export const MEDICAL_RULES: MedicalRule[] = [
   {
     category: "PATIENT_MONITORING",
     pattern:
-      /\b(?:patient monitor\w*|multiparameter monitor\w*|multi[ -]parameter monitor\w*|central (?:monitoring|nursing) station|telemetry|bedside monitor\w*|fetal monitor\w*|foetal monitor\w*|pulse oximeter\w*|capnograph\w*)\b/i,
+      /\b(?:patient monitor\w*|icu monitor\w*|multiparameter monitor\w*|multi[ -]parameter monitor\w*|central (?:monitoring|nursing) station|telemetry|bedside monitor\w*|fetal monitor\w*|foetal monitor\w*|pulse oximeter\w*|capnograph\w*)\b/i,
   },
   {
     category: "VENTILATION",
-    pattern: /\b(?:ventilator\w*|mechanical ventilation|icu ventilation)\b/i,
+    pattern:
+      /\b(?:HAMILTON[ -](?:C6|C3|C1|T1|MR1|EM7)|ventilator\w*|mechanical ventilation|icu ventilation)\b/i,
   },
   {
     category: "RESPIRATORY",
     pattern:
-      /\b(?:hfnc|high[ -]flow nasal|high[ -]flow therapy|heated humidifier|ventilator circuits?|flow sensor|expiratory valve|hmef|niv mask|nasal cannula|oxygen concentrator\w*|respiratory circuit\w*|breathing circuit\w*|nebulizer\w*|nebuliser\w*|cpap|bipap|humidifier for (?:ventilator|respiratory))\b/i,
+      /\b(?:H900|hfnc|high[ -]flow nasal|high[ -]flow therapy|heated humidifiers?|ventilator circuits?|flow sensors?|expiratory valves?|hmef|niv masks?|nasal cannulas?|oxygen concentrator\w*|respiratory circuit\w*|breathing circuit\w*|nebulizer\w*|nebuliser\w*|cpap|bipap|humidifier for (?:ventilator|respiratory))\b/i,
   },
   {
     category: "ANAESTHESIA",
@@ -48,12 +49,12 @@ export const MEDICAL_RULES: MedicalRule[] = [
   {
     category: "INFUSION",
     pattern:
-      /\b(?:infusion pump\w*|syringe pump\w*|volumetric pump\w*|tci pump\w*|enteral feeding pump\w*|feeding pump\w*|infusion workstation\w*|infusion system\w*)\b/i,
+      /\b(?:Flo[ -]?Skan|infusion pump\w*|syringe pump\w*|volumetric pump\w*|tci pump\w*|enteral feeding pump\w*|feeding pump\w*|infusion workstation\w*|infusion system\w*)\b/i,
   },
   {
     category: "ENDOSCOPY",
     pattern:
-      /\b(?:endoscop\w*|chola\w*scop\w*|spy[ -]?glass|insufflator\w*|suction irrigation|endoscopy camera\w*|endoscopy stack|exoscop\w*|or integration|integrated operating room|video gastroscop\w*|colonoscope\w*|gastroscope\w*)\b/i,
+      /\b(?:TELE PACK|TELECAM|VITOM|ENDOMAT|endoscop\w*|chola\w*scop\w*|spy[ -]?glass|insufflator\w*|suction irrigation|endoscopy camera\w*|endoscopy stack|exoscop\w*|or integration|integrated operating room|video gastroscop\w*|colonoscope\w*|gastroscope\w*)\b/i,
   },
   { category: "LAPAROSCOPY", pattern: /\b(?:laparoscop\w*|laparocator\w*)\b/i },
   { category: "ARTHROSCOPY", pattern: /\barthroscop\w*\b/i },
@@ -66,7 +67,7 @@ export const MEDICAL_RULES: MedicalRule[] = [
   {
     category: "ENT_AIRWAY",
     pattern:
-      /\b(?:laryngoscop\w*|video laryngoscop\w*|airway management|ent instrument\w*|intubation kit\w*)\b/i,
+      /\b(?:C[ -]MAC|laryngoscop\w*|video laryngoscop\w*|airway management|ent instrument\w*|intubation kit\w*)\b/i,
   },
   {
     category: "SURGICAL_INSTRUMENTS",
@@ -75,7 +76,8 @@ export const MEDICAL_RULES: MedicalRule[] = [
   },
   {
     category: "ELECTROSURGERY",
-    pattern: /\b(?:electrosurg\w*|diathermy|cautery|vessel seal\w*)\b/i,
+    pattern:
+      /\b(?:AUTOCON|electro[ -]?surg\w*|diathermy|(?:electro[ -]?)?cautery|vessel seal\w*)\b/i,
   },
   {
     category: "HOSPITAL_BEDS",
@@ -94,8 +96,7 @@ export const MEDICAL_RULES: MedicalRule[] = [
   },
   {
     category: "CARDIOLOGY_DIAGNOSTICS",
-    pattern:
-      /\b(?:cardiac stress test|treadmill test system|echocardiograph\w*)\b/i,
+    pattern: /\b(?:cardiac stress test|treadmill test system)\b/i,
   },
   { category: "ECG", pattern: /\b(?:ecg|ekg|electrocardiograph\w*)\b/i },
   { category: "HOLTER", pattern: /\bholter\b/i },
@@ -112,12 +113,12 @@ export const MEDICAL_RULES: MedicalRule[] = [
   {
     category: "COAGULATION",
     pattern:
-      /\b(?:coagulation analy[sz]er\w*|thromboelastograph\w*|teg system|teg analy[sz]er\w*)\b/i,
+      /\b(?:blood[ -]grouping(?: analy[sz]er\w*)?|coagulation analy[sz]er\w*|thromboelastograph\w*|teg system|teg analy[sz]er\w*)\b/i,
   },
   {
     category: "MEDICAL_FURNITURE",
     pattern:
-      /\b(?:examination (?:couch|table|chair)|patient chair\w*|clinical chair\w*|dialysis chair\w*|blood donor chair\w*|hospital trolley\w*|patient(?:s)? (?:shifting |transport )?troll(?:ey|ie)s?|bedside cabinet\w*|medical trolley\w*|instrument trolley\w*|operating table\w*|ot table\w*)\b/i,
+      /\b(?:hospital furniture|treatment chair\w*|examination (?:couch|table|chair)|patient chair\w*|clinical chair\w*|dialysis chair\w*|blood donor chair\w*|hospital trolley\w*|patient(?:s)? (?:shifting |transport )?troll(?:ey|ie)s?|bedside cabinet\w*|medical trolley\w*|instrument trolley\w*|operating table\w*|ot table\w*)\b/i,
   },
   {
     category: "CONSUMABLES",
@@ -137,7 +138,7 @@ export const MEDICAL_RULES: MedicalRule[] = [
   {
     category: "OTHER_MEDICAL_EQUIPMENT",
     pattern:
-      /\b(?:pacemaker\w*|brachytherapy|radiotherapy equipment|medical equipments?|biopacemaker\w*|brachytherapy|radiotherapy equipment|medical equipments?|radiant warmer|\bcrrt\b|nephelometer|spectrofluorometer|uv[ -]?(?:vis|visible).*spectro|medical oxygen regulator|dialysis machine\w*|haemodialysis|hemodialysis|breast ?board\w*|picc training|(?:training|medical) manne?quin\w*|prosthetic\w*|colposcop\w*|suction (?:apparatus|machine|unit)|dvt pump|vte pump|spirometer|autoclave\w*|sterilizer\w*|steriliser\w*|incubator for neonat\w*)\b/i,
+      /\b(?:eeg machines?|electroencephalograph\w*|pacemaker\w*|brachytherapy|radiotherapy equipment|medical equipments?|biopacemaker\w*|brachytherapy|radiotherapy equipment|medical equipments?|radiant warmer|\bcrrt\b|nephelometer|spectrofluorometer|uv[ -]?(?:vis|visible).*spectro|medical oxygen regulator|dialysis machine\w*|haemodialysis|hemodialysis|breast ?board\w*|picc training|(?:training|medical) manne?quin\w*|prosthetic\w*|colposcop\w*|suction (?:apparatus|machine|unit)|dvt pumps?|vte pumps?|spirometers?|autoclave\w*|sterilizer\w*|steriliser\w*|incubator for neonat\w*)\b/i,
   },
 ];
 export const NONMEDICAL_PATTERNS =

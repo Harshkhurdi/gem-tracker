@@ -4,7 +4,11 @@ import type {
   SourceFetchResult,
   TenderSourceAdapter,
 } from "@/types/tender";
-import { parseIndianDate, dayOnly } from "@/lib/tender/dates";
+import {
+  parseIndianDate,
+  dayOnly,
+  closingDeadlineTimestamp,
+} from "@/lib/tender/dates";
 import { classifyMedical } from "@/lib/tender/classifier";
 import { SourceHttp } from "../http";
 
@@ -202,8 +206,35 @@ export function createBilaspurAdapter(kind: Kind): TenderSourceAdapter {
             throw new Error(
               "Official procurement table missing from response.",
             );
+          const pageRecords = parseBilaspur(html, pageUrl, kind, attemptedAt);
+          let unreadableRows = 0;
+          $("#procurementTable tbody tr, #procurementTable > tr").each(
+            (_, row) => {
+              const cells = $(row).children("td");
+              if (!cells.length) return; // Header rows are not procurement records.
+              if (
+                cells.length === 1 &&
+                /^(?:no (?:data|records|tenders|procurements)(?: (?:available|found))?(?: in table)?|nothing found)[.!]?$/i.test(
+                  clean(cells.text()),
+                )
+              )
+                return;
+              if (cells.length !== 9 || !clean(cells.eq(2).text()))
+                unreadableRows++;
+            },
+          );
+          if (unreadableRows && !pageRecords.length)
+            throw new Error(
+              "Official procurement table structure changed; populated rows could not be read.",
+            );
+          if (unreadableRows) {
+            partial = true;
+            notes.push(
+              `${unreadableRows} official procurement rows could not be read because their structure changed.`,
+            );
+          }
           fetchedPages++;
-          records.push(...parseBilaspur(html, pageUrl, kind, attemptedAt));
+          records.push(...pageRecords);
           const nextPages = $("a[href]")
             .toArray()
             .map((a) => officialUrl($(a).attr("href") || "", pageUrl))
@@ -231,11 +262,28 @@ export function createBilaspurAdapter(kind: Kind): TenderSourceAdapter {
           !r.cancelled &&
           !r.withdrawn &&
           (!r.originalClosingDate ||
-            new Date(
-              r.extendedClosingDate || r.originalClosingDate,
-            ).getTime() >= Date.now() ||
+            closingDeadlineTimestamp(
+              r.datePrecision === "day"
+                ? (r.extendedClosingDate || r.originalClosingDate)?.slice(0, 10)
+                : r.extendedClosingDate || r.originalClosingDate,
+            ) >= Date.now() ||
             r.corrigenda?.some((c) => c.type === "extension")),
       );
+      const deferredDocuments = promising
+        .slice(3)
+        .filter(
+          (r) =>
+            r.documents?.length ||
+            r.corrigenda?.some(
+              (c) => /extension/i.test(c.title || "") && c.url,
+            ),
+        ).length;
+      if (deferredDocuments) {
+        partial = true;
+        notes.push(
+          `${deferredDocuments} relevant document checks deferred by the three-document limit.`,
+        );
+      }
       for (const r of promising.slice(0, 3)) {
         const correction = r.corrigenda?.find((c) =>
           /extension/i.test(c.title || ""),
@@ -276,17 +324,18 @@ export function createBilaspurAdapter(kind: Kind): TenderSourceAdapter {
           "Some attached corrigenda require document review for current deadlines.",
         );
       }
+      const listingAvailable = fetchedPages > 0 && !(error && !records.length);
       return {
         sourceId: id,
         sourceName: name,
-        status: fetchedPages
+        status: listingAvailable
           ? partial
             ? "PARTIAL"
             : "SUCCESS"
           : "UNAVAILABLE",
         records,
         attemptedAt,
-        successfulAt: fetchedPages ? new Date().toISOString() : undefined,
+        successfulAt: listingAvailable ? new Date().toISOString() : undefined,
         error,
         notes,
         metrics: {

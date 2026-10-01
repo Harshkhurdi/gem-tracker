@@ -4,7 +4,14 @@ import { BRAND_PORTFOLIOS } from "../config/brand-portfolios";
 
 const occurrences = (text: string, pattern: RegExp): string[] =>
   [...text.matchAll(new RegExp(pattern.source, "gi"))].map((m) => m[0]);
-export function classifyMedical(text: string): {
+const hasNonmedicalScope = (text: string, scopeText: string) =>
+  NONMEDICAL_PATTERNS.test(scopeText) ||
+  (!MEDICAL_RULES.some((rule) => rule.pattern.test(scopeText)) &&
+    NONMEDICAL_PATTERNS.test(text));
+export function classifyMedical(
+  text: string,
+  scopeText = text,
+): {
   categories: MedicalCategory[];
   matchedKeywords: string[];
   confidence: number;
@@ -20,7 +27,7 @@ export function classifyMedical(text: string): {
     }
   }
   // A strong nonmedical scope must not become medical through a buyer's name or boilerplate.
-  const excluded = NONMEDICAL_PATTERNS.test(text);
+  const excluded = hasNonmedicalScope(text, scopeText);
   const matchedKeywords = [...new Set(keywords.map((k) => k.toLowerCase()))];
   const isMedical = categories.length > 0 && !excluded;
   return {
@@ -33,13 +40,19 @@ export function classifyMedical(text: string): {
 export function matchBrands(
   text: string,
   categories?: MedicalCategory[],
+  scopeText = text,
 ): BrandMatch[] {
   const matches: BrandMatch[] = [];
-  const medical = classifyMedical(text);
+  if (hasNonmedicalScope(text, scopeText)) return matches;
+  const medical = classifyMedical(text, scopeText);
   const relevantCategories = categories ?? medical.categories;
   for (const portfolio of BRAND_PORTFOLIOS) {
     const brands = occurrences(text, portfolio.aliases),
-      models = occurrences(text, portfolio.models);
+      models = occurrences(text, portfolio.models).filter(
+        (model) =>
+          !portfolio.ambiguousModels?.test(model) ||
+          relevantCategories.some((c) => portfolio.categories.includes(c)),
+      );
     if (brands.length) {
       matches.push({
         brand: portfolio.brand,
@@ -56,7 +69,6 @@ export function matchBrands(
       });
       continue;
     }
-    if (NONMEDICAL_PATTERNS.test(text)) continue;
     const relevant = relevantCategories.filter((c) =>
       portfolio.categories.includes(c),
     );
@@ -67,15 +79,15 @@ export function matchBrands(
     const eligible = relevant.filter(
       (c) =>
         !(
-          portfolio.brand === "Hamilton Medical" &&
-          c === "RESPIRATORY" &&
-          !terms.length
+          (portfolio.brand === "Hamilton Medical" &&
+            c === "RESPIRATORY" &&
+            !terms.length) ||
+          (portfolio.brand === "LINET" &&
+            c === "MEDICAL_FURNITURE" &&
+            !terms.length)
         ),
     );
-    if (
-      eligible.length ||
-      (portfolio.brand === "LINET" && terms.length > 0 && medical.isMedical)
-    ) {
+    if (eligible.length || (terms.length > 0 && medical.isMedical)) {
       const keywords = MEDICAL_RULES.filter((r) =>
         eligible.includes(r.category),
       ).flatMap((r) => occurrences(text, r.pattern));

@@ -77,3 +77,11 @@ export function dayOnly(value: string) {
 export function istDay(now: Date = new Date()) {
   return new Date(now.getTime() + 330 * 60000).toISOString().slice(0, 10);
 }
+
+/** A date-only tender deadline includes the full Indian calendar day. */
+export function closingDeadlineTimestamp(value?: string): number {
+  if (!value) return NaN;
+  return Date.parse(
+    /^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T23:59:59.999+05:30` : value,
+  );
+}

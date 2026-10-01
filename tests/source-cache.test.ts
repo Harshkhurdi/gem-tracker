@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
     { value: unknown; expires: number; tags: string[] }
   >(),
   revalidateTag: vi.fn(),
+  pendingTags: new Set<string>(),
 }));
 vi.mock("next/cache", () => ({
   unstable_cache:
@@ -33,8 +34,7 @@ vi.mock("next/cache", () => ({
     },
   revalidateTag: (tag: string, profile: unknown) => {
     mocks.revalidateTag(tag, profile);
-    for (const [key, entry] of mocks.entries)
-      if (entry.tags.includes(tag)) mocks.entries.delete(key);
+    mocks.pendingTags.add(tag);
   },
 }));
 vi.mock("@/lib/sources/registry", () => {
@@ -92,6 +92,7 @@ beforeEach(() => {
   vi.useFakeTimers();
   vi.setSystemTime(new Date("2026-09-30T10:00:00Z"));
   mocks.entries.clear();
+  mocks.pendingTags.clear();
   mocks.fetch.mockReset();
   mocks.readDurable.mockReset();
   mocks.writeDurable.mockReset();
@@ -106,7 +107,60 @@ beforeEach(() => {
 });
 afterEach(() => vi.useRealTimers());
 
+// Model Route Handler invalidation being applied only after its response ends.
+function finishInvalidationRequest() {
+  for (const [key, entry] of mocks.entries)
+    if (entry.tags.some((tag) => mocks.pendingTags.has(tag)))
+      mocks.entries.delete(key);
+  mocks.pendingTags.clear();
+}
+
 describe("Official source cache", () => {
+  it("invalidates a warm snapshot and persists the subsequent GET result", async () => {
+    mocks.fetch.mockResolvedValueOnce(result("SUCCESS", "Old monitor"));
+    const { cachedSource, invalidateSources } =
+      await import("@/lib/cache/source-cache");
+    await cachedSource("test-source");
+    const refreshed = result("SUCCESS", "New ventilator");
+    mocks.fetch.mockResolvedValueOnce(refreshed);
+    invalidateSources();
+    expect(mocks.fetch).toHaveBeenCalledTimes(1);
+    finishInvalidationRequest();
+    expect((await cachedSource("test-source")).records).toEqual(
+      refreshed.records,
+    );
+    expect((await cachedSource("test-source")).records).toEqual(
+      refreshed.records,
+    );
+    expect(mocks.fetch).toHaveBeenCalledTimes(2);
+  });
+  it("does not fetch on cold invalidation and fetches the subsequent GET once", async () => {
+    const refreshed = result("SUCCESS", "New ventilator");
+    mocks.fetch.mockResolvedValue(refreshed);
+    const { cachedSource, invalidateSources } =
+      await import("@/lib/cache/source-cache");
+    invalidateSources();
+    expect(mocks.fetch).not.toHaveBeenCalled();
+    finishInvalidationRequest();
+    expect((await cachedSource("test-source")).records).toEqual(
+      refreshed.records,
+    );
+    expect((await cachedSource("test-source")).records).toEqual(
+      refreshed.records,
+    );
+    expect(mocks.fetch).toHaveBeenCalledTimes(1);
+  });
+  it("replaces retained records with an empty successful listing", async () => {
+    mocks.fetch.mockResolvedValueOnce(result("SUCCESS", "Old monitor"));
+    const { cachedSource, invalidateSources } =
+      await import("@/lib/cache/source-cache");
+    await cachedSource("test-source");
+    mocks.fetch.mockResolvedValueOnce(result("SUCCESS"));
+    invalidateSources();
+    finishInvalidationRequest();
+    expect((await cachedSource("test-source")).records).toEqual([]);
+    expect((await cachedSource("test-source")).records).toEqual([]);
+  });
   it("caches an unavailable source across repeated reads for the source TTL", async () => {
     mocks.fetch.mockResolvedValue(result("UNAVAILABLE"));
     const { cachedSource } = await import("@/lib/cache/source-cache");
@@ -115,15 +169,17 @@ describe("Official source cache", () => {
     expect((await cachedSource("test-source")).status).toBe("UNAVAILABLE");
     expect(mocks.fetch).toHaveBeenCalledTimes(1);
   });
-  it("retains prior records and the failure status after a forced refresh fails", async () => {
+  it("retains prior records and failure status when the GET after invalidation fails", async () => {
     const original = result("SUCCESS", "Patient monitor");
     mocks.fetch.mockResolvedValueOnce(original);
-    const { cachedSource, forceSource } =
+    const { cachedSource, invalidateSources } =
       await import("@/lib/cache/source-cache");
     await cachedSource("test-source");
     vi.advanceTimersByTime(61_000);
     mocks.fetch.mockResolvedValueOnce(result("UNAVAILABLE"));
-    const forced = await forceSource("test-source");
+    invalidateSources();
+    finishInvalidationRequest();
+    const forced = await cachedSource("test-source");
     expect(forced.status).toBe("UNAVAILABLE");
     expect(forced.stale).toBe(true);
     expect(forced.records).toEqual(original.records);
@@ -135,15 +191,17 @@ describe("Official source cache", () => {
     expect(reread.records).toEqual(original.records);
     expect(mocks.fetch).toHaveBeenCalledTimes(2);
   });
-  it("persists a successful forced result and serves it on subsequent reads", async () => {
+  it("persists a successful result after invalidation and serves it on subsequent reads", async () => {
     mocks.fetch.mockResolvedValueOnce(result("SUCCESS", "Old monitor"));
-    const { cachedSource, forceSource } =
+    const { cachedSource, invalidateSources } =
       await import("@/lib/cache/source-cache");
     await cachedSource("test-source");
     vi.advanceTimersByTime(61_000);
     const refreshed = result("SUCCESS", "New ventilator");
     mocks.fetch.mockResolvedValueOnce(refreshed);
-    expect((await forceSource("test-source")).records).toEqual(
+    invalidateSources();
+    finishInvalidationRequest();
+    expect((await cachedSource("test-source")).records).toEqual(
       refreshed.records,
     );
     expect(mocks.writeDurable).toHaveBeenLastCalledWith(

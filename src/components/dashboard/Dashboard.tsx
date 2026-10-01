@@ -4,15 +4,14 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import type { DashboardData, Tender } from "@/types/tender";
 
-const brands = [
-  "Samsung Healthcare",
-  "Hamilton Medical",
-  "KARL STORZ",
-  "LINET",
-  "Medcaptain",
-  "Spacelabs Healthcare",
-  "Skanray",
-];
+import {
+  PRIORITY_BRANDS as brands,
+  daysUntilClosing as daysUntil,
+  isActive as active,
+  filterAndSortTenders,
+  refreshElapsedStatuses,
+} from "@/lib/tender/dashboard-filter";
+
 const statusNames: Record<string, string> = {
   ACTIVE_VERIFIED: "Active · verified",
   ACTIVE_LIKELY: "Active · likely",
@@ -41,30 +40,6 @@ function date(value?: string | null, time = false) {
   return Number.isNaN(d.getTime())
     ? "Not available"
     : (time ? timeFormatter : dateFormatter).format(d);
-}
-function daysUntil(value?: string) {
-  if (!value) return null;
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return null;
-  const parts = (v: Date) =>
-    new Intl.DateTimeFormat("en-CA", {
-      timeZone: "Asia/Kolkata",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).formatToParts(v);
-  const day = (v: Date) => {
-    const p = parts(v);
-    return Date.UTC(
-      Number(p.find((x) => x.type === "year")?.value),
-      Number(p.find((x) => x.type === "month")?.value) - 1,
-      Number(p.find((x) => x.type === "day")?.value),
-    );
-  };
-  return Math.round((day(d) - day(new Date())) / 86400000);
-}
-function active(t: Tender) {
-  return t.status === "ACTIVE_VERIFIED" || t.status === "ACTIVE_LIKELY";
 }
 function label(value: string) {
   return value
@@ -289,6 +264,7 @@ export default function Dashboard() {
   const [category, setCategory] = useState("");
   const [brand, setBrand] = useState("");
   const [explicit, setExplicit] = useState(false);
+  const [prioritize, setPrioritize] = useState(true);
   const [source, setSource] = useState("");
   const [closing, setClosing] = useState("");
   const [sort, setSort] = useState("closing");
@@ -297,16 +273,21 @@ export default function Dashboard() {
     setBusy(true);
     setError("");
     try {
-      const response = await fetch(
-        force ? "/api/refresh" : "/api/tenders",
-        force
-          ? {
-              method: "POST",
-              headers: { Authorization: `Bearer ${token}` },
-              cache: "no-store",
-            }
-          : { cache: "no-store" },
-      );
+      if (force) {
+        const refresh = await fetch("/api/refresh", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+          cache: "no-store",
+        });
+        const receipt = await refresh.json();
+        if (!refresh.ok || !receipt.refreshRequested)
+          throw new Error(
+            receipt.error || "Source refresh could not be requested.",
+          );
+        setToken("");
+      }
+      // The invalidation response must finish before fetching fresh snapshots.
+      const response = await fetch("/api/tenders", { cache: "no-store" });
       const body = await response.json();
       if (!response.ok)
         throw new Error(body.error || `Request failed (${response.status})`);
@@ -329,7 +310,7 @@ export default function Dashboard() {
   }
   useEffect(() => {
     const controller = new AbortController();
-    // Read cached results only; source retrieval requires an explicit administrator action.
+    // Read cached results; expired snapshots revalidate automatically.
     fetch("/api/tenders", { cache: "no-store", signal: controller.signal })
       .then(async (response) => {
         const body = await response.json();
@@ -358,90 +339,50 @@ export default function Dashboard() {
     return () => controller.abort();
   }, []);
   const tenders = useMemo(
-    () =>
-      (data?.tenders || []).map((t) =>
-        (t.status === "ACTIVE_VERIFIED" || t.status === "ACTIVE_LIKELY") &&
-        t.effectiveClosingDate &&
-        Date.parse(t.effectiveClosingDate) < clock
-          ? { ...t, status: "EXPIRED" as const }
-          : t,
-      ),
+    () => refreshElapsedStatuses(data?.tenders || [], clock),
     [data, clock],
   );
   const categories = useMemo(
     () => [...new Set(data?.tenders.flatMap((t) => t.categories) ?? [])].sort(),
     [data],
   );
-  const filtered = useMemo(() => {
-    const term = query.trim().toLowerCase();
-    return tenders
-      .filter((t) => {
-        const diff = daysUntil(t.effectiveClosingDate);
-        const explicitMatches = t.brandMatches.filter(
-          (b) => b.matchType !== "portfolio",
-        );
-        const searchable = [
-          t.title,
-          t.description,
-          t.institutionName,
-          t.organisation,
-          t.department,
-          t.buyer,
-          t.location,
-          t.tenderId,
-          t.referenceNumber,
-          t.sourceName,
-          ...t.categories.map(label),
-          ...t.matchedKeywords,
-          ...t.brandMatches.flatMap((b) => [b.brand, ...b.matchedTerms]),
-        ]
-          .filter(Boolean)
-          .join(" ")
-          .toLowerCase();
-        return (
-          (!term || searchable.includes(term)) &&
-          (!region || t.region === region) &&
-          (!institution ||
-            t.institutionId === institution ||
-            t.consignees?.some((c) => c.institutionId === institution)) &&
-          (!scope || t.procurementScope === scope) &&
-          (status === "all" ||
-            (status === "active" ? active(t) : t.status === status)) &&
-          (!category ||
-            t.categories.includes(category as (typeof t.categories)[number])) &&
-          (!brand ||
-            t.brandMatches.some(
-              (b) =>
-                b.brand === brand && (!explicit || b.matchType !== "portfolio"),
-            )) &&
-          (!explicit || explicitMatches.length > 0) &&
-          (!source || t.sourceId === source) &&
-          (!closing || (diff !== null && diff >= 0 && diff <= Number(closing)))
-        );
-      })
-      .sort((a, b) =>
-        sort === "newest"
-          ? (Date.parse(b.publishDate || "") || 0) -
-            (Date.parse(a.publishDate || "") || 0)
-          : sort === "relevance"
-            ? b.confidence - a.confidence
-            : (Date.parse(a.effectiveClosingDate || "") || Infinity) -
-              (Date.parse(b.effectiveClosingDate || "") || Infinity),
-      );
-  }, [
-    tenders,
-    query,
-    region,
-    institution,
-    scope,
-    status,
-    category,
-    brand,
-    explicit,
-    source,
-    closing,
-    sort,
-  ]);
+  const filtered = useMemo(
+    () =>
+      filterAndSortTenders(
+        tenders,
+        {
+          query,
+          region,
+          institution,
+          scope,
+          status,
+          category,
+          brand,
+          explicit,
+          source,
+          closing,
+          sort,
+          prioritize,
+        },
+        clock,
+      ),
+    [
+      tenders,
+      query,
+      region,
+      institution,
+      scope,
+      status,
+      category,
+      brand,
+      explicit,
+      source,
+      closing,
+      sort,
+      prioritize,
+      clock,
+    ],
+  );
   function reset() {
     setQuery("");
     setRegion("");
@@ -451,6 +392,7 @@ export default function Dashboard() {
     setCategory("");
     setBrand("");
     setExplicit(false);
+    setPrioritize(true);
     setSource("");
     setClosing("");
     setSort("closing");
@@ -701,7 +643,7 @@ export default function Dashboard() {
                     value={brand}
                     onChange={(e) => setBrand(e.target.value)}
                   >
-                    <option value="">All portfolios</option>
+                    <option value="">All medical equipment</option>
                     {brands.map((v) => (
                       <option key={v}>{v}</option>
                     ))}
@@ -741,6 +683,14 @@ export default function Dashboard() {
                 <label className="checkbox-label">
                   <input
                     type="checkbox"
+                    checked={prioritize}
+                    onChange={(e) => setPrioritize(e.target.checked)}
+                  />{" "}
+                  Prioritize selected portfolios
+                </label>
+                <label className="checkbox-label">
+                  <input
+                    type="checkbox"
                     checked={explicit}
                     onChange={(e) => setExplicit(e.target.checked)}
                   />{" "}
@@ -763,6 +713,9 @@ export default function Dashboard() {
                     {status === "active"
                       ? "Verified and likely active records."
                       : "Records matching your filters."}{" "}
+                    {prioritize
+                      ? "Matches for your seven portfolios appear first; the selected sort applies within each group. "
+                      : "All medical equipment follows the selected sort. "}
                     Dates shown in Indian Standard Time.
                   </p>
                 </div>

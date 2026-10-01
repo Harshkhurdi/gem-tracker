@@ -1,6 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
-import { allSources } from "@/lib/cache/source-cache";
-import { buildDashboard } from "@/lib/tender/normalize";
+import { invalidateSources } from "@/lib/cache/source-cache";
 export const runtime = "nodejs";
 export const maxDuration = 300;
 export async function POST(request: Request) {
@@ -22,7 +21,12 @@ export async function POST(request: Request) {
   const origin = request.headers.get("origin");
   if (origin && origin !== new URL(request.url).origin)
     return Response.json({ error: "Invalid origin" }, { status: 403 });
-  return Response.json(buildDashboard(await allSources(true), true), {
-    headers: { "Cache-Control": "no-store" },
-  });
+  invalidateSources();
+  return Response.json(
+    { refreshRequested: true },
+    {
+      status: 202,
+      headers: { "Cache-Control": "no-store" },
+    },
+  );
 }

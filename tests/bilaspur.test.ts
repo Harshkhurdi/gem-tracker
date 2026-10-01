@@ -1,5 +1,9 @@
-import { describe, it, expect } from "vitest";
-import { parseBilaspur } from "../src/lib/sources/adapters/bilaspur";
+import { describe, it, expect, vi, afterEach } from "vitest";
+import {
+  parseBilaspur,
+  createBilaspurAdapter,
+} from "../src/lib/sources/adapters/bilaspur";
+import { SourceHttp } from "../src/lib/sources/http";
 const url = "https://www.aiimsbilaspur.edu.in/procurement/tender/gem";
 const at = "2026-09-30T12:00:00Z";
 function row(
@@ -99,5 +103,93 @@ describe("AIIMS Bilaspur official listing parser", () => {
         at,
       ),
     ).toHaveLength(2);
+  });
+});
+
+describe("AIIMS Bilaspur source structure health", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+  const changedRow =
+    "<tr><td>1</td><td>Equipment tender</td><td>01-10-2026</td><td>Bid document</td></tr>";
+  it("keeps a populated unrecognised listing unavailable for last-good retention", async () => {
+    vi.spyOn(SourceHttp.prototype, "text").mockResolvedValue(html(changedRow));
+    const result = await createBilaspurAdapter("gem").fetch();
+    expect(result.status).toBe("UNAVAILABLE");
+    expect(result.successfulAt).toBeUndefined();
+    expect(result.error).toContain("structure changed");
+  });
+  it("marks mixed readable and changed rows partial while retaining parsed records", async () => {
+    vi.spyOn(SourceHttp.prototype, "text").mockResolvedValue(
+      html(
+        row("r", "Office furniture", "01-09-2026", "10-10-2026") + changedRow,
+      ),
+    );
+    const result = await createBilaspurAdapter("gem").fetch();
+    expect(result.status).toBe("PARTIAL");
+    expect(result.records).toHaveLength(1);
+    expect(result.notes.join(" ")).toContain("structure changed");
+  });
+  it.each(["", '<tr><td colspan="9">No data available in table</td></tr>'])(
+    "allows a genuine empty procurement table (%s)",
+    async (rows) => {
+      vi.spyOn(SourceHttp.prototype, "text").mockResolvedValue(html(rows));
+      const result = await createBilaspurAdapter("gem").fetch();
+      expect(result.status).toBe("SUCCESS");
+      expect(result.records).toHaveLength(0);
+      expect(result.successfulAt).toBeDefined();
+    },
+  );
+  it("marks a later changed page partial rather than dropping earlier records", async () => {
+    vi.spyOn(SourceHttp.prototype, "text")
+      .mockResolvedValueOnce(
+        html(row("r", "Office furniture", "01-09-2026", "10-10-2026")) +
+          '<a href="?page=1">Next</a>',
+      )
+      .mockResolvedValueOnce(html(changedRow));
+    const result = await createBilaspurAdapter("gem").fetch();
+    expect(result.status).toBe("PARTIAL");
+    expect(result.records).toHaveLength(1);
+    expect(result.error).toContain("structure changed");
+  });
+  it("keeps an incomplete empty paginated listing unavailable", async () => {
+    vi.spyOn(SourceHttp.prototype, "text")
+      .mockResolvedValueOnce(html("") + '<a href="?page=1">Next</a>')
+      .mockResolvedValueOnce(html(changedRow));
+    const result = await createBilaspurAdapter("gem").fetch();
+    expect(result.status).toBe("UNAVAILABLE");
+    expect(result.successfulAt).toBeUndefined();
+  });
+  it("reports the document cap without expanding upstream checks", async () => {
+    vi.spyOn(SourceHttp.prototype, "text").mockResolvedValue(
+      html(
+        Array.from({ length: 4 }, (_, i) =>
+          row(String(i), "Surgical instruments", "01-01-2099", "10-10-2099"),
+        ).join(""),
+      ),
+    );
+    const documents = vi
+      .spyOn(SourceHttp.prototype, "documentText")
+      .mockResolvedValue("");
+    const result = await createBilaspurAdapter("gem").fetch();
+    expect(result.status).toBe("PARTIAL");
+    expect(result.notes.join(" ")).toContain(
+      "1 relevant document checks deferred",
+    );
+    expect(documents).toHaveBeenCalledTimes(3);
+  });
+  it("checks documents through the final millisecond of an IST closing day", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-01T23:59:59.999+05:30"));
+    vi.spyOn(SourceHttp.prototype, "text").mockResolvedValue(
+      html(row("r", "Surgical instruments", "01-09-2026", "01-10-2026")),
+    );
+    const documents = vi
+      .spyOn(SourceHttp.prototype, "documentText")
+      .mockResolvedValue("");
+    const result = await createBilaspurAdapter("gem").fetch();
+    expect(result.metrics.detailChecks).toBe(1);
+    expect(documents).toHaveBeenCalledTimes(1);
   });
 });

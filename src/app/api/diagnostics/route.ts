@@ -20,7 +20,9 @@ export async function GET() {
           .flatMap((s) => s.records)
           .filter((r) => assignInstitutions(r).some((x) => x.id === i.id));
         const medicalRaw = raw.filter(
-          (r) => classifyMedical([r.title, r.description].join(" ")).isMedical,
+          (r) =>
+            classifyMedical([r.title, r.description].join(" "), r.title)
+              .isMedical,
         );
         const tenders = data.tenders.filter(
           (t) =>

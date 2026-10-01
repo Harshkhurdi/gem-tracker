@@ -1,13 +1,10 @@
+import { closingDeadlineTimestamp } from "./dates";
 import type { RawTender, TenderStatus } from "../../types/tender";
 const validDate = (value?: string): number | undefined => {
   if (!value) return;
   const n = Date.parse(value);
   return Number.isFinite(n) ? n : undefined;
 };
-const deadline = (value: string): number =>
-  /^\d{4}-\d{2}-\d{2}$/.test(value)
-    ? Date.parse(`${value}T23:59:59.999+05:30`)
-    : Date.parse(value);
 export function resolveStatus(
   raw: RawTender,
   now = new Date(),
@@ -37,7 +34,7 @@ export function resolveStatus(
   }
   if (terminal) return { status: terminal, effectiveClosingDate };
   if (!effectiveClosingDate) return { status: "DEADLINE_UNKNOWN" };
-  if (deadline(effectiveClosingDate) < now.getTime())
+  if (closingDeadlineTimestamp(effectiveClosingDate) < now.getTime())
     return { status: "EXPIRED", effectiveClosingDate };
   const fetched = validDate(raw.fetchedAt);
   const fresh =

@@ -20,6 +20,7 @@ export function normalizeTender(
   if (!matched.length && raw.procurementScope !== "statewide") return;
   const classification = classifyMedical(
     [raw.title, raw.description].filter(Boolean).join(" "),
+    raw.title,
   );
   if (!classification.isMedical) return;
   const state = resolveStatus(
@@ -65,6 +66,7 @@ export function normalizeTender(
     brandMatches: matchBrands(
       [raw.title, raw.description].filter(Boolean).join(" "),
       classification.categories,
+      raw.title,
     ),
     matchedKeywords: classification.matchedKeywords,
     confidence: classification.confidence,
@@ -72,7 +74,13 @@ export function normalizeTender(
     stale,
     sourceReferences: raw.sourceReferences?.length
       ? raw.sourceReferences
-      : [{ sourceName: raw.sourceName, url: raw.tenderUrl || raw.sourceUrl }],
+      : [
+          {
+            sourceId: raw.sourceId,
+            sourceName: raw.sourceName,
+            url: raw.tenderUrl || raw.sourceUrl,
+          },
+        ],
   };
 }
 export function buildDashboard(
@@ -98,8 +106,10 @@ export function buildDashboard(
       }
       if (assignments.length) matched++;
       if (
-        !classifyMedical([raw.title, raw.description].filter(Boolean).join(" "))
-          .isMedical
+        !classifyMedical(
+          [raw.title, raw.description].filter(Boolean).join(" "),
+          raw.title,
+        ).isMedical
       ) {
         negatives++;
         continue;

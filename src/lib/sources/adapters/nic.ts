@@ -296,12 +296,21 @@ export function createNicAdapter(config: NicConfig): TenderSourceAdapter {
           config.organisation.lastIndex = 0;
           if (!config.organisation.test(normalized(td.eq(1).text()))) return;
           matchingOrganisations++;
-          const count = Number(normalized(td.eq(2).text()));
+          const countText = normalized(td.eq(2).text());
+          const count = /^\d+$/.test(countText) ? Number(countText) : undefined;
           const a = td.eq(2).find("a[href]").first();
           if (a.length) {
             const url = absolute(a.attr("href")!, indexUrl);
             links.push(url);
-            expectedCounts.set(url, Number(normalized(a.text())) || 0);
+            const linkedCount = normalized(a.text());
+            if (/^\d+$/.test(linkedCount))
+              expectedCounts.set(url, Number(linkedCount));
+            else {
+              partial = true;
+              notes.push(
+                "Matching organisation active count could not be read.",
+              );
+            }
           } else if (count === 0) {
             successfulListings++;
           } else {
@@ -367,7 +376,7 @@ export function createNicAdapter(config: NicConfig): TenderSourceAdapter {
             matchInstitutions(text, matchingRegion(raw)).length > 0 ||
             !!config.statewide;
           const medical =
-            classifyMedical(text).isMedical ||
+            classifyMedical(text, raw.title).isMedical ||
             /\b(?:equipment|machineries|DIAMONDS)\b/i.test(raw.title);
           if (assigned) metrics.institutionMatches++;
           else metrics.unassignedRejected++;

@@ -102,6 +102,43 @@ describe("NIC source completeness and endpoint", () => {
     expect(result.status).toBe("UNAVAILABLE");
     expect(result.successfulAt).toBeUndefined();
   });
+  it("does not coerce a blank organisation count to a successful zero", async () => {
+    vi.spyOn(SourceHttp.prototype, "text").mockResolvedValue(
+      orgIndex("<tr><td>1</td><td>Medical Services</td><td></td></tr>"),
+    );
+    const result = await createNicAdapter(config).fetch();
+    expect(result.status).toBe("UNAVAILABLE");
+    expect(result.successfulAt).toBeUndefined();
+  });
+  it("checks a clinical title despite unrelated nonmedical organisation boilerplate", async () => {
+    const text = vi
+      .spyOn(SourceHttp.prototype, "text")
+      .mockResolvedValueOnce(
+        orgIndex(
+          '<tr><td>1</td><td>Medical Services</td><td><a href="/list">1</a></td></tr>',
+        ),
+      )
+      .mockResolvedValueOnce(
+        "<h1>Tender ID</h1>" +
+          list
+            .replace("Digital PET/CT Scanner 128 Slice", "Surgical instruments")
+            .replace(
+              "||Accounts||Head Office",
+              "||Electrical works||Head Office",
+            ),
+      )
+      .mockResolvedValueOnce(
+        detail.replace(
+          /<table id='corrigendumDocumenttable'>[\s\S]*?<\/table>/g,
+          "",
+        ),
+      );
+    const result = await createNicAdapter(config).fetch();
+    expect(text).toHaveBeenCalledTimes(3);
+    expect(result.metrics.medicalMatches).toBe(1);
+    expect(result.metrics.detailChecks).toBe(1);
+    expect(result.records[0].verification).toBe("detail");
+  });
   it("keeps all failed organisation fetches unavailable so last-good cache survives", async () => {
     vi.spyOn(SourceHttp.prototype, "text")
       .mockResolvedValueOnce(

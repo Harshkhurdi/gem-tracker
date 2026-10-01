@@ -81,6 +81,7 @@ export interface Corrigendum {
   url?: string;
 }
 export interface SourceReference {
+  sourceId?: string;
   sourceName: string;
   url: string;
 }
