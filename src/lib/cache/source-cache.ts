@@ -77,9 +77,8 @@ async function perform(id: string): Promise<SourceFetchResult> {
 function reader(id: string) {
   let fn = readers.get(id);
   if (!fn) {
-    // Document deadline checks changed in this audit. Never resurrect source
-    // snapshots produced before those checks through a later upstream failure.
-    fn = unstable_cache(async () => perform(id), ["medical-source-v3", id], {
+    // Category-aware classification needs snapshots containing official NIC metadata.
+    fn = unstable_cache(async () => perform(id), ["medical-source-v4", id], {
       revalidate: ttl,
       tags: ["tender-source-" + id],
     });

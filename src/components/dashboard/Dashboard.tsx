@@ -136,6 +136,18 @@ function TenderRows({
                     Published: {date(t.publishDate)} · Checked:{" "}
                     {date(t.checkedAt, true)} IST
                   </p>
+                  {(t.tenderCategory || t.productCategory || t.procurementCategory || t.workCategory) && (
+                    <dl className="official-categories">
+                      {[
+                        ["Tender category", t.tenderCategory],
+                        ["Official product category", t.productCategory],
+                        ["Procurement category", t.procurementCategory],
+                        ["Work category", t.workCategory],
+                      ].filter(([, value]) => value).map(([name, value]) => (
+                        <div key={name}><dt>{name}</dt><dd>{value}</dd></div>
+                      ))}
+                    </dl>
+                  )}
                   {t.originalClosingDate && (
                     <p>
                       Original deadline: {date(t.originalClosingDate)}

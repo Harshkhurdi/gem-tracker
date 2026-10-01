@@ -85,7 +85,14 @@ export interface SourceReference {
   sourceName: string;
   url: string;
 }
-export interface RawTender {
+/** Official procurement categories, kept separately from inferred medical categories. */
+export interface ProcurementCategories {
+  tenderCategory?: string;
+  productCategory?: string;
+  procurementCategory?: string;
+  workCategory?: string;
+}
+export interface RawTender extends ProcurementCategories {
   id?: string;
   title: string;
   description?: string;

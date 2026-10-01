@@ -21,7 +21,7 @@ export async function GET() {
           .filter((r) => assignInstitutions(r).some((x) => x.id === i.id));
         const medicalRaw = raw.filter(
           (r) =>
-            classifyMedical([r.title, r.description].join(" "), r.title)
+            classifyMedical([r.title, r.description].filter(Boolean).join("\n"), r.title, r)
               .isMedical,
         );
         const tenders = data.tenders.filter(

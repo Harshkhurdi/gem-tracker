@@ -175,6 +175,10 @@ export function enrichNicDetail(
     ]
       .filter(Boolean)
       .join(" "),
+    tenderCategory: map.get("Tender Category") || raw.tenderCategory,
+    productCategory: map.get("Product Category") || raw.productCategory,
+    procurementCategory: map.get("Procurement Category") || raw.procurementCategory,
+    workCategory: map.get("Work Category") || raw.workCategory,
     organisation: org,
     organisationChain: org?.split("||").map((s) => s.trim()),
     location,
@@ -382,7 +386,7 @@ export function createNicAdapter(config: NicConfig): TenderSourceAdapter {
             matchInstitutions(text, matchingRegion(raw)).length > 0 ||
             !!config.statewide;
           const medical =
-            classifyMedical(text, raw.title).isMedical ||
+            classifyMedical([raw.title, raw.description].filter(Boolean).join("\n"), raw.title, raw).isMedical ||
             /\b(?:equipment|machineries|DIAMONDS)\b/i.test(raw.title);
           if (assigned) metrics.institutionMatches++;
           else metrics.unassignedRejected++;

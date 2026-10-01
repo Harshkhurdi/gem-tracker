@@ -27,7 +27,7 @@ async function command(args: (string | number)[]) {
 export async function readDurable(
   id: string,
 ): Promise<SourceFetchResult | undefined> {
-  const raw = await command(["GET", "medical-tenders:v2:" + id]);
+  const raw = await command(["GET", "medical-tenders:v3:" + id]);
   if (typeof raw !== "string") return;
   try {
     const value = JSON.parse(raw) as SourceFetchResult;
@@ -41,7 +41,7 @@ export async function readDurable(
 export async function writeDurable(value: SourceFetchResult) {
   await command([
     "SET",
-    "medical-tenders:v2:" + value.sourceId,
+    "medical-tenders:v3:" + value.sourceId,
     JSON.stringify(value),
     "EX",
     604800,

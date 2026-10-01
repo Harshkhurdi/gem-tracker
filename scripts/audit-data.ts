@@ -88,7 +88,7 @@ const audit = {
       institutionMatchedRecords: raw.length,
       medicalRecords: raw.filter(
         (r) =>
-          classifyMedical([r.title, r.description].join(" "), r.title)
+          classifyMedical([r.title, r.description].filter(Boolean).join("\n"), r.title, r)
             .isMedical,
       ).length,
       activeVerified: tenders.filter((t) => t.status === "ACTIVE_VERIFIED")

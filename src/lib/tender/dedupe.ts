@@ -116,6 +116,10 @@ export function deduplicate(tenders: Tender[]): {
     result[index] = {
       ...best,
       description: best.description || other.description,
+      tenderCategory: best.tenderCategory || other.tenderCategory,
+      productCategory: best.productCategory || other.productCategory,
+      procurementCategory: best.procurementCategory || other.procurementCategory,
+      workCategory: best.workCategory || other.workCategory,
       documents: documents.length
         ? documents.filter(
             (d, i) => documents.findIndex((x) => x.url === d.url) === i,

@@ -19,8 +19,9 @@ export function normalizeTender(
   const matched = assignInstitutions(raw);
   if (!matched.length && raw.procurementScope !== "statewide") return;
   const classification = classifyMedical(
-    [raw.title, raw.description].filter(Boolean).join(" "),
+    [raw.title, raw.description].filter(Boolean).join("\n"),
     raw.title,
+    raw,
   );
   if (!classification.isMedical) return;
   const state = resolveStatus(
@@ -64,9 +65,10 @@ export function normalizeTender(
     ...state,
     categories: classification.categories,
     brandMatches: matchBrands(
-      [raw.title, raw.description].filter(Boolean).join(" "),
+      [raw.title, raw.description].filter(Boolean).join("\n"),
       classification.categories,
       raw.title,
+      raw,
     ),
     matchedKeywords: classification.matchedKeywords,
     confidence: classification.confidence,
@@ -107,8 +109,9 @@ export function buildDashboard(
       if (assignments.length) matched++;
       if (
         !classifyMedical(
-          [raw.title, raw.description].filter(Boolean).join(" "),
+          [raw.title, raw.description].filter(Boolean).join("\n"),
           raw.title,
+          raw,
         ).isMedical
       ) {
         negatives++;
