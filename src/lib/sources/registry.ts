@@ -1,3 +1,4 @@
+import { processPrioritySource, linkRetenders } from "../specification/enrich";
 import { createNicAdapter } from "./adapters/nic";
 import { createBilaspurAdapter } from "./adapters/bilaspur";
 import { createInstitutionAdapter } from "./adapters/institution";
@@ -23,8 +24,37 @@ const hp = [
   "jlngmc-chamba",
   "rkgmc-hamirpur",
 ];
-export const adapters: TenderSourceAdapter[] = [
+const baseAdapters: TenderSourceAdapter[] = [
   createInstitutionAdapter("aiims-bathinda"),
+  createInstitutionAdapter("aiims-bathinda-open"),
+  createNicAdapter({
+    id: "cppp-aiims-bathinda",
+    name: "CPPP / AIIMS Bathinda",
+    origin: "https://eprocure.gov.in",
+    prefix: "/eprocure/app",
+    organisation: /All India Institute of Medical Sciences Bathinda/i,
+    region: "Punjab",
+    institutionIds: ["aiims-bathinda"],
+  }),
+  createNicAdapter({
+    id: "cppp-aiims-bilaspur",
+    name: "CPPP / AIIMS Bilaspur",
+    origin: "https://eprocure.gov.in",
+    prefix: "/eprocure/app",
+    organisation: /All India Institute of Medical Sciences Bilaspur/i,
+    region: "Himachal Pradesh",
+    institutionIds: ["aiims-bilaspur"],
+  }),
+  createNicAdapter({
+    id: "hp-health",
+    name: "Himachal eProcurement / Health & Family Welfare",
+    origin: "https://hptenders.gov.in",
+    prefix: "/nicgep/app",
+    organisation: /Department of Health and Family Welfare/i,
+    region: "Himachal Pradesh",
+    institutionIds: hp,
+    statewide: true,
+  }),
   ...(["gem", "cppp", "niq"] as const).map(createBilaspurAdapter),
   createNicAdapter({
     id: "cppp-pgimer",
@@ -140,6 +170,15 @@ export const adapters: TenderSourceAdapter[] = [
     },
   },
 ];
+export const adapters: TenderSourceAdapter[] = baseAdapters.map((adapter) => ({
+  ...adapter,
+  async fetch() {
+    const result = await adapter.fetch();
+    const processed = await processPrioritySource(result);
+    linkRetenders(processed.records);
+    return processed;
+  },
+}));
 export function getAdapter(id: string) {
   return adapters.find((a) => a.id === id);
 }

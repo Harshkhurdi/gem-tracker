@@ -1,3 +1,8 @@
+import type {
+  PriorityEquipment,
+  TenderSpecification,
+  PriorityDiscoveryMetrics,
+} from "./specification";
 export type Region = "Chandigarh" | "Punjab" | "Himachal Pradesh";
 export type TenderStatus =
   | "ACTIVE_VERIFIED"
@@ -123,6 +128,10 @@ export interface RawTender extends ProcurementCategories {
   verification?: "detail" | "listing";
   datePrecision?: "day" | "minute";
   notes?: string[];
+  priorityCategories?: PriorityEquipment[];
+  /** Declared items from an inspected official BOQ/technical section, never buyer context. */
+  documentProductScope?: string;
+  specification?: TenderSpecification;
   fetchedAt: string;
 }
 export interface Tender extends RawTender {
@@ -156,6 +165,7 @@ export interface SourceFetchResult {
   error?: string;
   notes: string[];
   metrics: SourceMetrics;
+  priorityDiscovery?: PriorityDiscoveryMetrics;
   durationMs: number;
   stale?: boolean;
 }

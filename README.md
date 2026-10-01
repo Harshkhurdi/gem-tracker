@@ -81,7 +81,7 @@ Institution matching uses normalized aliases, organisation chains, title, descri
 
 Deterministic medical categories and portfolio rules cover **Samsung Healthcare, Hamilton Medical, KARL STORZ, LINET, Medcaptain, Spacelabs Healthcare and Skanray**. Matching generic clinical products does not require a brand name. Labels distinguish `explicit-brand`, `explicit-model` and `portfolio`. A portfolio match indicates product-category relevance, **not supplier eligibility or compliance with the tender specification**.
 
-The dashboard defaults to **Prioritize selected portfolios**: opportunities matching any of the seven portfolios appear first, with the selected deadline/newest/relevance sort applied inside each group. The seven companies have equal priority. Turn it off for ordinary sorting across all medical opportunities. Brand selection includes generic portfolio matches; explicit-only selection requires the selected brand or its model to be named. Source filtering includes contributing sources preserved during deduplication.
+The dashboard defaults to **Prioritize selected portfolios**: when sorting by closing date, urgent deadlines come first, then priority equipment, verified status, extraction completeness and portfolio relevance break ties. Newest/relevance sorting retains the portfolio preference. The seven companies have equal priority. Turn it off for ordinary sorting across all medical opportunities. Brand selection includes generic portfolio matches; explicit-only selection requires the selected brand or its model to be named. Source filtering includes contributing sources preserved during deduplication.
 
 Strong negative context rejects office/computer monitors and chairs, hostel furniture, water/sewage pumps, road/building works, lifts, DG sets, vehicles and generic electrical work. Normalization and deduplication prefer strong tender/GeM identifiers; references reused in different procurements are not blindly merged. Provenance links are retained.
 
@@ -114,3 +114,20 @@ There is no cron requirement and no reminder automation. `GET /api/tenders` expo
 ## Second production data audit
 
 [AUDIT.md](AUDIT.md) records the individual audit of all 25 baseline active opportunities, final refreshed records, institution coverage, unknown-deadline breakdown and genuine source limitations. These audit observations are documentation, not runtime seed data. `audit:data` optionally exports source snapshots, normalized data and diagnostics to a chosen development directory; the production application never depends on these filesystem exports.
+
+
+## Priority equipment and specification extraction
+
+The five priority filters cover ventilators, ultrasound systems, defibrillators, clinical beds/stretchers/pressure care, and endoscopy. Their counts use real active records and recalculate status as time passes. Ultrasound gel, fetal Doppler and teaching simulators remain in the wider medical tracker without inflating primary equipment counts.
+
+Discovery scans expanded aliases across the official registry, including the full Bathinda tender/quotation list, direct CPPP Bathinda and Bilaspur organisation lists, and Himachal Health & Family Welfare procurement. Generic clinical packages enter document inspection without being accepted as specific equipment; declared official BOQ/specification items must establish the product. Existing civil/department exclusions still apply.
+
+Priority processing runs on refresh and is cached with source snapshots. Each source checks up to 16 active or recent unknown candidates, three at a time, with a 55-second document budget, 16-second request timeout and eight linked documents per record. Warm-process refreshes rotate oversized queues; a cold instance restarts the queue. Historic unknown records older than 180 days are retained for inspection but receive no deep processing. PDF text is bounded to 120 pages/8 MB. Official PDF hyperlinks are followed only to supported document targets. XLSX expansion/rows/columns are bounded; formulas, macros and external links are never executed. Legacy binary XLS and CAPTCHA downloads require manual review. No automatic OCR is configured.
+
+The structured sections include technical requirements, accessories/consumables, warranty, CMC/AMC, lifecycle support, regulatory clauses, eligibility, delivery/training, commercial terms and quantities. Every excerpt carries its document and physical PDF page or worksheet/row. No template value is added when a field is missing. Current dated amendments take precedence; originals remain in amendment history. "Complete" describes the inspected linked set, never product compliance or guaranteed exhaustive portal coverage.
+
+`src/lib/specification/reviewed-scans.ts` contains selected excerpts visually checked from two official current scans. These excerpts are reused only after freshly fetching the exact URL and matching SHA-256. They stay **partial**, explicitly marked as reviewed scan excerpts, and changed files fall back to scanned/unavailable. This is manual source review rather than OCR or synthetic production fixtures. Linked but inaccessible technical attachments remain unavailable; the Bilaspur document's unusual Odisha service-centre wording is retained literally for review.
+
+`audit:data` exports real source snapshots for reproducible category audits. Source success describes listing access; technical-document availability and extraction status are separate. Zero active results do not establish that no unmirrored tender exists.
+
+Already downloaded official PDF bytes can be shared with priority extraction for at most 60 seconds in a bounded 32 MB/12-document memory cache. This avoids a second download immediately after normal metadata inspection. Buffers are copied before PDF worker transfer; expired entries require a new official request.

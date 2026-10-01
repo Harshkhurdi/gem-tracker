@@ -9,7 +9,7 @@ export const MEDICAL_RULES: MedicalRule[] = [
   {
     category: "ULTRASOUND",
     pattern:
-      /\b(?:ultra\s?sound|ultrasonograph\w*|usg|echo machine\w*|echocardiograph\w*|doppler|sonograph\w*)\b/i,
+      /\b(?:pocus|ultra\s?sound|ultrasonograph\w*|usg|echo machine\w*|echocardiograph\w*|doppler|sonograph\w*)\b/i,
   },
   {
     category: "XRAY_DR",
@@ -35,7 +35,7 @@ export const MEDICAL_RULES: MedicalRule[] = [
   {
     category: "VENTILATION",
     pattern:
-      /\b(?:HAMILTON[ -](?:C6|C3|C1|T1|MR1|EM7)|ventilator\w*|mechanical ventilation|icu ventilation)\b/i,
+      /\b(?:HAMILTON[ -](?:C6|C3|C1|T1|MR1|EM7)|ventilator\w*|mechanical ventilation|non[ -]?invasive ventilation|icu ventilation)\b/i,
   },
   {
     category: "RESPIRATORY",
@@ -62,7 +62,7 @@ export const MEDICAL_RULES: MedicalRule[] = [
   {
     category: "UROLOGY_ENDOSCOPY",
     pattern:
-      /\b(?:cystoscop\w*|ureteroscop\w*|resectoscop\w*|hysteroscop\w*)\b/i,
+      /\b(?:cystoscop\w*|ureteroscop\w*|u(?:retero|eretero)[ -]?renoscop\w*|resectoscop\w*|hysteroscop\w*)\b/i,
   },
   {
     category: "ENT_AIRWAY",
@@ -82,7 +82,7 @@ export const MEDICAL_RULES: MedicalRule[] = [
   {
     category: "HOSPITAL_BEDS",
     pattern:
-      /\b(?:hospital bed\w*|icu bed\w*|clinical bed\w*|patient bed\w*|critical[ -]care bed\w*|med[ -]surg bed\w*|pa?ediatric bed\w*|bariatric bed\w*|birthing bed\w*|obstetric bed\w*|smart bed\w*|electric (?:icu |hospital )?bed\w*|motoris?zed hospital bed\w*|electric medical bed\w*)\b/i,
+      /\b(?:hospital bed\w*|icu bed\w*|icu cots?|ward beds?|medical beds?|(?:five|three)[ -]function beds?|clinical bed\w*|patient bed\w*|critical[ -]care bed\w*|med[ -]surg bed\w*|pa?ediatric bed\w*|bariatric bed\w*|birthing bed\w*|obstetric bed\w*|smart bed\w*|electric (?:icu |hospital )?bed\w*|motoris?zed hospital bed\w*|electric medical bed\w*)\b/i,
   },
   {
     category: "STRETCHERS",

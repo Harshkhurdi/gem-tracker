@@ -1,3 +1,4 @@
+import { priorityCategories } from "../config/priority-equipment";
 import { istDay } from "./dates";
 import { createHash } from "node:crypto";
 import { assignInstitutions } from "./institution-matcher";
@@ -20,7 +21,7 @@ export function normalizeTender(
   if (!matched.length && raw.procurementScope !== "statewide") return;
   const classification = classifyMedical(
     [raw.title, raw.description].filter(Boolean).join("\n"),
-    raw.title,
+    raw.documentProductScope || raw.title,
     raw,
   );
   if (!classification.isMedical) return;
@@ -63,11 +64,12 @@ export function normalizeTender(
     institutionName: institution?.shortName,
     procurementScope: scope,
     ...state,
+    priorityCategories: priorityCategories(raw),
     categories: classification.categories,
     brandMatches: matchBrands(
       [raw.title, raw.description].filter(Boolean).join("\n"),
       classification.categories,
-      raw.title,
+      raw.documentProductScope || raw.title,
       raw,
     ),
     matchedKeywords: classification.matchedKeywords,

@@ -1,5 +1,5 @@
+import type { Readable } from "node:stream";
 import { EnvHttpProxyAgent, request as httpRequest } from "undici";
-import { Readable } from "node:stream";
 const proxy =
   process.env.HTTPS_PROXY || process.env.HTTP_PROXY
     ? new EnvHttpProxyAgent()
@@ -50,6 +50,43 @@ export function officialDocumentRedirect(value: string, from: string) {
   } catch {
     /* malformed redirect */
   }
+}
+const documentBytesCache = new Map<
+  string,
+  { bytes: Uint8Array; fetchedAt: number }
+>();
+export function rememberDocumentBytes(
+  url: string,
+  bytes: Uint8Array,
+  now = Date.now(),
+): void {
+  if (
+    !officialUrl(url) ||
+    bytes.length > 8_000_000 ||
+    new TextDecoder().decode(bytes.slice(0, 5)) !== "%PDF-"
+  )
+    return;
+  for (const [key, value] of documentBytesCache)
+    if (now - value.fetchedAt > 60000) documentBytesCache.delete(key);
+  documentBytesCache.delete(url);
+  documentBytesCache.set(url, {
+    bytes: Uint8Array.from(bytes),
+    fetchedAt: now,
+  });
+  while (
+    [...documentBytesCache.values()].reduce((n, v) => n + v.bytes.length, 0) >
+      32_000_000 ||
+    documentBytesCache.size > 12
+  )
+    documentBytesCache.delete(documentBytesCache.keys().next().value!);
+}
+export function recentDocumentBytes(
+  url: string,
+  now = Date.now(),
+): Uint8Array | undefined {
+  const cached = documentBytesCache.get(url);
+  if (!cached || now - cached.fetchedAt > 60000) return;
+  return cached.bytes.slice();
 }
 export class SourceHttp {
   private cookies = new Map<string, Map<string, string>>();
@@ -121,10 +158,10 @@ export class SourceHttp {
           for (const item of value) responseHeaders.append(name, item);
         else if (value !== undefined) responseHeaders.set(name, String(value));
       }
-      const response = new Response(
-        Readable.toWeb(incoming.body) as ReadableStream,
-        { status: incoming.statusCode, headers: responseHeaders },
-      );
+      const response = new Response(sourceResponseStream(incoming.body), {
+        status: incoming.statusCode,
+        headers: responseHeaders,
+      });
       const setCookies = response.headers.getSetCookie?.() || [
         response.headers.get("set-cookie") || "",
       ];
@@ -180,6 +217,7 @@ export class SourceHttp {
       result.set(part, offset);
       offset += part.length;
     }
+    rememberDocumentBytes(url, result);
     return result;
   }
   async text(url: string, init: RequestInit = {}) {
@@ -229,4 +267,40 @@ export function sanitizeError(error: unknown) {
     : status
       ? `Official source HTTP ${status[1]}`
       : "Official listing could not be retrieved or its format changed";
+}
+
+/** Cancellation must close the bridge before destroying a live HTTP body. */
+export function sourceResponseStream(
+  body: Readable,
+): ReadableStream<Uint8Array> {
+  let closed = false;
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      body.on("data", (chunk: Uint8Array) => {
+        if (closed) return;
+        controller.enqueue(chunk);
+        if ((controller.desiredSize ?? 0) <= 0) body.pause();
+      });
+      body.on("end", () => {
+        if (!closed) {
+          closed = true;
+          controller.close();
+        }
+      });
+      body.on("error", (error: Error) => {
+        if (!closed) {
+          closed = true;
+          controller.error(error);
+        }
+      });
+      body.pause();
+    },
+    pull() {
+      if (!closed) body.resume();
+    },
+    cancel() {
+      closed = true;
+      body.destroy();
+    },
+  });
 }

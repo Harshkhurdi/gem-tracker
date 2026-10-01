@@ -10,6 +10,7 @@ export interface DashboardFilters {
   scope: string;
   status: string;
   category: string;
+  priorityEquipment?: string;
   brand: string;
   explicit: boolean;
   source: string;
@@ -63,6 +64,7 @@ export function filterAndSortTenders(
   now = Date.now(),
 ): Tender[] {
   const term = f.query.trim().toLowerCase();
+  const priorityEnabled = tenders.some((t) => t.priorityCategories?.length);
   return tenders
     .filter((t) => {
       const days = daysUntilClosing(t.effectiveClosingDate, now);
@@ -77,6 +79,13 @@ export function filterAndSortTenders(
         t.location,
         t.tenderId,
         t.referenceNumber,
+        ...(t.specification
+          ? Object.values(t.specification.sections).flatMap((items) =>
+              items.map(
+                (item) => `${item.field}: ${item.value || item.requirement}`,
+              ),
+            )
+          : []),
         t.sourceName,
         ...t.categories.map((c) => c.replaceAll("_", " ")),
         ...t.matchedKeywords,
@@ -90,7 +99,8 @@ export function filterAndSortTenders(
         (m) => !f.brand || m.brand === f.brand,
       );
       return (
-        (!term || searchable.includes(term)) &&
+        (!term ||
+          term.split(/\s+/).every((word) => searchable.includes(word))) &&
         (!f.region || t.region === f.region) &&
         (!f.institution ||
           t.institutionId === f.institution ||
@@ -99,6 +109,8 @@ export function filterAndSortTenders(
         (f.status === "all" ||
           (f.status === "active" ? isActive(t) : t.status === f.status)) &&
         (!f.category || t.categories.some((c) => c === f.category)) &&
+        (!f.priorityEquipment ||
+          t.priorityCategories?.some((c) => c === f.priorityEquipment)) &&
         (!f.brand || brandMatches.length > 0) &&
         (!f.explicit ||
           brandMatches.some((m) => m.matchType !== "portfolio")) &&
@@ -110,6 +122,29 @@ export function filterAndSortTenders(
       );
     })
     .sort((a, b) => {
+      // In priority-enabled datasets closing urgency wins over portfolio preference.
+      if (f.sort === "closing" && priorityEnabled) {
+        const deadline = (t: Tender) =>
+          closingDeadlineTimestamp(t.effectiveClosingDate);
+        const ar = deadline(a),
+          br = deadline(b);
+        const gap =
+          (Number.isFinite(ar) ? ar : Infinity) -
+          (Number.isFinite(br) ? br : Infinity);
+        if (gap) return gap;
+        const priority =
+          Number(!!b.priorityCategories?.length) -
+          Number(!!a.priorityCategories?.length);
+        if (priority) return priority;
+        const verified =
+          Number(b.status === "ACTIVE_VERIFIED") -
+          Number(a.status === "ACTIVE_VERIFIED");
+        if (verified) return verified;
+        const specs =
+          Number(b.specification?.extractionStatus === "complete") -
+          Number(a.specification?.extractionStatus === "complete");
+        if (specs) return specs;
+      }
       if (f.prioritize) {
         const group =
           Number(hasPriorityPortfolio(b)) - Number(hasPriorityPortfolio(a));

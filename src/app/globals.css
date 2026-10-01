@@ -1088,3 +1088,95 @@ footer {
     font-size: 11px;
   }
 }
+
+/* Priority review additions retain the existing dashboard design. */
+.priority-equipment-panel {
+  margin: 1.5rem 0;
+  padding: 1.25rem;
+  border: 1px solid var(--border, #deded5);
+  border-radius: 12px;
+  background: var(--surface, #fff);
+}
+.priority-equipment-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+.priority-equipment-grid button {
+  padding: 0.9rem;
+  text-align: left;
+  color: inherit;
+  background: transparent;
+  border: 1px solid #d9dfda;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.priority-equipment-grid button.selected {
+  border-color: #28624c;
+  background: #edf5ef;
+}
+.priority-equipment-grid strong {
+  display: block;
+  font-size: 1.6rem;
+  margin-top: 0.3rem;
+}
+.priority-equipment-badge {
+  font-size: 0.7rem;
+  color: #255f46;
+  background: #eef5ef;
+  border-radius: 4px;
+  padding: 0.2rem 0.4rem;
+}
+.specification-panel {
+  margin-top: 0.9rem;
+  border-top: 1px solid #deded5;
+  padding-top: 0.7rem;
+}
+.specification-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.specification-grid h4 {
+  margin: 0.7rem 0;
+}
+.specification-panel li {
+  margin-bottom: 0.6rem;
+  overflow-wrap: anywhere;
+}
+.specification-panel small {
+  display: block;
+  margin-top: 0.2rem;
+  color: #56655c;
+}
+@media (max-width: 760px) {
+  .priority-equipment-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .specification-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.specification-table {
+  overflow-x: auto;
+  max-width: 100%;
+}
+.specification-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+.specification-table th,
+.specification-table td {
+  text-align: left;
+  vertical-align: top;
+  padding: 0.5rem;
+  border-bottom: 1px solid var(--line);
+}
+.specification-table th {
+  font-weight: 600;
+}
+.specification-grid section {
+  min-width: 0;
+}

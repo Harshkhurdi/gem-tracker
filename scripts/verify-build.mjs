@@ -10,9 +10,24 @@ for (const route of ["tenders", "diagnostics"]) {
   const native = files.filter(
     (file) => file.includes("@napi-rs/canvas-") && file.endsWith(".node"),
   );
-  assert(workers.length > 0, `${route}: PDF worker missing from deployment trace`);
-  assert(native.length > 0, `${route}: PDF native polyfill missing from deployment trace`);
+  assert(
+    files.some((file) => file.includes("node_modules/exceljs/")),
+    `${route}: spreadsheet parser missing from deployment trace`,
+  );
+  assert(
+    workers.length > 0,
+    `${route}: PDF worker missing from deployment trace`,
+  );
+  assert(
+    native.length > 0,
+    `${route}: PDF native polyfill missing from deployment trace`,
+  );
   for (const file of [...workers, ...native])
-    assert(existsSync(resolve(dirname(trace), file)), `${route}: traced asset missing`);
+    assert(
+      existsSync(resolve(dirname(trace), file)),
+      `${route}: traced asset missing`,
+    );
 }
-console.log("PASS: PDF worker and native assets included in Vercel API traces");
+console.log(
+  "PASS: PDF worker, native assets and spreadsheet parser included in Vercel API traces",
+);

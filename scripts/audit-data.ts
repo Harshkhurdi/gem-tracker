@@ -1,3 +1,4 @@
+import { priorityAudit } from "./priority-audit";
 import { writeFile, mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { adapters } from "../src/lib/sources/registry";
@@ -43,7 +44,9 @@ await Promise.all(
   }),
 );
 const data = buildDashboard(results);
+const priority = priorityAudit(data, results);
 const audit = {
+  priorityDiscovery: priority.categories,
   generatedAt: data.generatedAt,
   summary: data.summary,
   sources: data.sources.map((source) => {
@@ -88,8 +91,11 @@ const audit = {
       institutionMatchedRecords: raw.length,
       medicalRecords: raw.filter(
         (r) =>
-          classifyMedical([r.title, r.description].filter(Boolean).join("\n"), r.title, r)
-            .isMedical,
+          classifyMedical(
+            [r.title, r.description].filter(Boolean).join("\n"),
+            r.title,
+            r,
+          ).isMedical,
       ).length,
       activeVerified: tenders.filter((t) => t.status === "ACTIVE_VERIFIED")
         .length,
@@ -110,6 +116,10 @@ if (outputIndex >= 0 && process.argv[outputIndex + 1]) {
   const directory = resolve(process.argv[outputIndex + 1]);
   await mkdir(directory, { recursive: true });
   await Promise.all([
+    writeFile(
+      resolve(directory, "priority-audit.json"),
+      JSON.stringify(priority, null, 2),
+    ),
     writeFile(
       resolve(directory, "source-snapshots.json"),
       JSON.stringify(results),

@@ -1,3 +1,7 @@
+import {
+  priorityRank,
+  genericPriorityCandidate,
+} from "../../config/priority-equipment";
 import { load } from "cheerio";
 import type { RawTender, TenderSourceAdapter } from "@/types/tender";
 import { SourceHttp, officialUrl } from "../http";
@@ -12,6 +16,11 @@ import { reviewedDocumentDeadline } from "../reviewed-documents";
 const bathindaUrl =
   "https://www.aiimsbathinda.edu.in/Procurements.aspx?FXoLDJ=BOII5FUynjpl5RZJJ8nW1g%3D%3D&JnH7tY=BTQgLv+ebY48FN9pEezgn4swg+G4uRJpYiYSMufUrUU%3D";
 const configs = {
+  "aiims-bathinda-open": {
+    name: "AIIMS Bathinda open tenders and quotations",
+    url: "https://www.aiimsbathinda.edu.in/Procurements.aspx?FXoLDJ=ydRRTTxkdt6Trx91pX1+cA%3D%3D&JnH7tY=ni6p7uJmUYh6NtRIoH1zej6ayg0V9vON2iB6aRQlYRo%3D",
+    institutionId: "aiims-bathinda",
+  },
   "aiims-bathinda": {
     name: "AIIMS Bathinda GeM mirror",
     url: bathindaUrl,
@@ -56,9 +65,13 @@ export function parseInstitution(
       end: string | undefined,
       rawDate = "",
       docCell = c;
-    if (key === "aiims-bathinda" && c.length === 6) {
+    if (
+      (key === "aiims-bathinda" || key === "aiims-bathinda-open") &&
+      c.length === 6
+    ) {
       id = c.eq(1).text().trim();
-      if (!/^GEM\/\d{4}\/B\/\d+$/.test(id)) return;
+      if (key === "aiims-bathinda" && !/^GEM\/\d{4}\/B\/\d+$/.test(id)) return;
+      if (!id) return;
       title = c.eq(2).text().trim();
       published = parseIndianDate(c.eq(3).text());
       rawDate = c.eq(4).text().trim();
@@ -96,11 +109,11 @@ export function parseInstitution(
       .toArray()
       .flatMap((a) => {
         const url = officialUrl($(a).attr("href") || "", config.url);
-        return url && /\.pdf(?:$|\?)/i.test(url)
+        return url && /\.(?:pdf|xlsx?)(?:$|\?)/i.test(url)
           ? [{ label: $(a).text().trim() || "Official document", url }]
           : [];
       });
-    const gem = title.match(/GEM\/\d{4}\/B\/\d+/i)?.[0];
+    const gem = [title, id].join(" ").match(/GEM\/\d{4}\/B\/\d+/i)?.[0];
     const notes: string[] = [];
     let institutionId: string | undefined = config.institutionId;
     if (key === "bfuhs") {
@@ -135,7 +148,12 @@ export function parseInstitution(
       sourceUrl: config.url,
       tenderUrl: config.url,
       tenderId: gem || (key === "aiims-bathinda" ? id : undefined),
-      referenceNumber: undefined,
+      referenceNumber: key === "aiims-bathinda-open" ? id : undefined,
+      corrigenda: docs
+        .filter((d) => /corrig|amend|extension/i.test(d.label))
+        .map((d) => ({ title: d.label, url: d.url, type: "corrigendum" })),
+      cancelled:
+        docs.some((d) => /cancellation|cancelled/i.test(d.label)) || undefined,
       publishDate: published,
       originalClosingDate: end,
       datePrecision: dayOnly(rawDate) ? "day" : "minute",
@@ -260,14 +278,16 @@ export function createInstitutionAdapter(
         const candidates = records
           .filter(
             (r) =>
-              classifyMedical(r.title).isMedical &&
+              (classifyMedical(r.title).isMedical ||
+                genericPriorityCandidate(r)) &&
               (!r.originalClosingDate ||
                 Date.parse(r.originalClosingDate) >= now),
           )
           .sort(
             (a, b) =>
+              priorityRank(b, now) - priorityRank(a, now) ||
               Date.parse(b.publishDate || "0") -
-              Date.parse(a.publishDate || "0"),
+                Date.parse(a.publishDate || "0"),
           )
           .slice(0, key === "bfuhs" ? 12 : key === "aiims-bathinda" ? 8 : 6);
         let inspected = 0,

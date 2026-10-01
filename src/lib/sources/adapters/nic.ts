@@ -1,3 +1,10 @@
+import { linkedDocuments } from "../../specification/documents";
+import { inspectPriorityTender } from "../../specification/enrich";
+import {
+  priorityRank,
+  genericPriorityCandidate,
+  priorityCategories,
+} from "../../config/priority-equipment";
 import * as cheerio from "cheerio";
 import type {
   RawTender,
@@ -177,7 +184,8 @@ export function enrichNicDetail(
       .join(" "),
     tenderCategory: map.get("Tender Category") || raw.tenderCategory,
     productCategory: map.get("Product Category") || raw.productCategory,
-    procurementCategory: map.get("Procurement Category") || raw.procurementCategory,
+    procurementCategory:
+      map.get("Procurement Category") || raw.procurementCategory,
     workCategory: map.get("Work Category") || raw.workCategory,
     organisation: org,
     organisationChain: org?.split("||").map((s) => s.trim()),
@@ -365,9 +373,7 @@ export function createNicAdapter(config: NicConfig): TenderSourceAdapter {
             }
           } catch (e) {
             partial = true;
-            notes.push(
-              `Organisation fetch failed: ${sanitizeError(e)}`,
-            );
+            notes.push(`Organisation fetch failed: ${sanitizeError(e)}`);
           }
         }
         if (!successfulListings || (!records.length && partial))
@@ -386,7 +392,12 @@ export function createNicAdapter(config: NicConfig): TenderSourceAdapter {
             matchInstitutions(text, matchingRegion(raw)).length > 0 ||
             !!config.statewide;
           const medical =
-            classifyMedical([raw.title, raw.description].filter(Boolean).join("\n"), raw.title, raw).isMedical ||
+            classifyMedical(
+              [raw.title, raw.description].filter(Boolean).join("\n"),
+              raw.title,
+              raw,
+            ).isMedical ||
+            genericPriorityCandidate(raw) ||
             /\b(?:equipment|machineries|DIAMONDS)\b/i.test(raw.title);
           if (assigned) metrics.institutionMatches++;
           else metrics.unassignedRejected++;
@@ -394,18 +405,20 @@ export function createNicAdapter(config: NicConfig): TenderSourceAdapter {
           else metrics.falsePositivesRejected++;
           return assigned && medical;
         });
-        if (candidates.length > 12) {
+        candidates.sort((a, b) => priorityRank(b) - priorityRank(a));
+        const detailLimit = 20;
+        if (candidates.length > detailLimit) {
           partial = true;
           notes.push(
-            `${candidates.length - 12} relevant detail checks deferred by the 12-detail limit.`,
+            `${candidates.length - detailLimit} relevant detail checks deferred by the 20-detail limit.`,
           );
         }
         let next = 0;
         await Promise.all(
           Array.from(
-            { length: Math.min(3, candidates.length, 12) },
+            { length: Math.min(3, candidates.length, detailLimit) },
             async () => {
-              while (next < Math.min(12, candidates.length)) {
+              while (next < Math.min(detailLimit, candidates.length)) {
                 const raw = candidates[next++];
                 const index = records.indexOf(raw);
                 try {
@@ -414,17 +427,25 @@ export function createNicAdapter(config: NicConfig): TenderSourceAdapter {
                   let enriched = enrichNicDetail(raw, html, url);
                   metrics.detailChecks++;
                   let corrFailure = false;
-                  const needed = (enriched.corrigenda || []).filter((c) =>
-                    /date|extend|cancel|withdraw/i.test(`${c.type} ${c.title}`),
+                  const needed = (enriched.corrigenda || []).filter(
+                    (c) =>
+                      priorityCategories(enriched).length > 0 ||
+                      /date|extend|cancel|withdraw/i.test(
+                        `${c.type} ${c.title}`,
+                      ),
                   );
-                  if (needed.length > 2) {
+                  const correctionLimit = priorityCategories(enriched).length
+                    ? 5
+                    : 2;
+                  if (needed.length > correctionLimit) {
                     partial = true;
                     corrFailure = true;
                     notes.push(
                       `Corrigendum checks capped for ${raw.tenderId}.`,
                     );
                   }
-                  for (const c of needed.slice(0, 2)) {
+                  let amendmentPublished = Number.NEGATIVE_INFINITY;
+                  for (const c of needed.slice(0, correctionLimit)) {
                     try {
                       const detail = parseNicCorrigendum(
                         await http.text(sessionUrl(c.url!)),
@@ -434,12 +455,16 @@ export function createNicAdapter(config: NicConfig): TenderSourceAdapter {
                       Object.assign(c, detail);
                       if (
                         detail.revisedClosingDate &&
-                        (!enriched.extendedClosingDate ||
-                          Date.parse(detail.revisedClosingDate) >
-                            Date.parse(enriched.extendedClosingDate))
-                      )
+                        (Date.parse(c.publishedDate || "") >=
+                          amendmentPublished ||
+                          (needed.length === 1 && !c.publishedDate))
+                      ) {
                         enriched.extendedClosingDate =
                           detail.revisedClosingDate;
+                        amendmentPublished =
+                          Date.parse(c.publishedDate || "") ||
+                          amendmentPublished;
+                      }
                     } catch (e) {
                       partial = true;
                       corrFailure = true;
@@ -457,6 +482,47 @@ export function createNicAdapter(config: NicConfig): TenderSourceAdapter {
                         "Corrigendum verification incomplete; active status remains likely.",
                       ],
                     };
+                  if (
+                    priorityCategories(enriched).length ||
+                    genericPriorityCandidate(enriched)
+                  ) {
+                    // Download links live on the explicitly linked full-detail page.
+                    // Use this listing session rather than an unrelated later cookie jar.
+                    try {
+                      const $detail = cheerio.load(html);
+                      const more = $detail(
+                        'a[href*="page=FrontEndTenderDetails"]',
+                      )
+                        .filter((_, a) =>
+                          /view more details/i.test($detail(a).text()),
+                        )
+                        .first()
+                        .attr("href");
+                      if (more) {
+                        const fullUrl = absolute(more, url);
+                        const fullHtml = await http.text(sessionUrl(fullUrl));
+                        if (
+                          cheerio
+                            .load(fullHtml)
+                            .root()
+                            .text()
+                            .includes(raw.tenderId!)
+                        ) {
+                          const exposed = linkedDocuments(fullHtml, fullUrl);
+                          enriched.documents = [
+                            ...(enriched.documents || []),
+                            ...exposed,
+                          ];
+                        }
+                      }
+                      await inspectPriorityTender(enriched, http);
+                    } catch {
+                      enriched.notes = [
+                        ...(enriched.notes || []),
+                        "Priority full-detail documents could not be inspected within the source budget.",
+                      ];
+                    }
+                  }
                   records[index] = enriched;
                 } catch (e) {
                   partial = true;

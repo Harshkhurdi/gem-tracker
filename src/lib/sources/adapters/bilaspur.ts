@@ -1,3 +1,7 @@
+import {
+  priorityRank,
+  genericPriorityCandidate,
+} from "../../config/priority-equipment";
 import * as cheerio from "cheerio";
 import type {
   RawTender,
@@ -31,15 +35,49 @@ const names: Record<Kind, string> = {
 // revisions. Retain that review across transient PDF failures. These are not
 // replacement deadlines: no current closing date is inferred from an old PDF.
 const reviewedConflicts = [
-  { documentName: "GeM tender for the Procurement of Endoscopic Spine System for the Department of Orthopaedics GeM bid No. GEM-2026-B-7421096..pdf", published: "2026-05-09", listed: "2026-11-09", documentDeadline: "2026-05-09T17:00:00+05:30", bid: "GEM/2026/B/7421096" },
-  { documentName: "GeM tender for the Procurement of Double Lumen Dialysis Catheter for the Department of Nephrology and Dialysis, AIIMS Bilaspur (H.P.) Vide GeM bid No..pdf", published: "2026-05-11", listed: "2026-11-11", documentDeadline: "2026-05-11T16:00:00+05:30", bid: "GEM/2026/B/7439204" },
-  { documentName: "GeM tender for the Procurement of Target Controlled Infusion Pumps for the Dept. of Anaesthesiology, AIIMS Bilaspur (H.P.).pdf", published: "2026-05-11", listed: "2026-11-11", documentDeadline: "2026-05-11T17:00:00+05:30", bid: "GEM/2026/B/7410483" },
+  {
+    documentName:
+      "GeM tender for the Procurement of Endoscopic Spine System for the Department of Orthopaedics GeM bid No. GEM-2026-B-7421096..pdf",
+    published: "2026-05-09",
+    listed: "2026-11-09",
+    documentDeadline: "2026-05-09T17:00:00+05:30",
+    bid: "GEM/2026/B/7421096",
+  },
+  {
+    documentName:
+      "GeM tender for the Procurement of Double Lumen Dialysis Catheter for the Department of Nephrology and Dialysis, AIIMS Bilaspur (H.P.) Vide GeM bid No..pdf",
+    published: "2026-05-11",
+    listed: "2026-11-11",
+    documentDeadline: "2026-05-11T16:00:00+05:30",
+    bid: "GEM/2026/B/7439204",
+  },
+  {
+    documentName:
+      "GeM tender for the Procurement of Target Controlled Infusion Pumps for the Dept. of Anaesthesiology, AIIMS Bilaspur (H.P.).pdf",
+    published: "2026-05-11",
+    listed: "2026-11-11",
+    documentDeadline: "2026-05-11T17:00:00+05:30",
+    bid: "GEM/2026/B/7410483",
+  },
 ];
-function reviewedConflict(documents: RawTender["documents"], published?: string) {
-  return reviewedConflicts.find((e) => published?.slice(0, 10) === e.published && documents?.some((d) => {
-    try { return decodeURIComponent(new URL(d.url).pathname) === `/sites/default/files/2026-05/${e.documentName}`; }
-    catch { return false; }
-  }));
+function reviewedConflict(
+  documents: RawTender["documents"],
+  published?: string,
+) {
+  return reviewedConflicts.find(
+    (e) =>
+      published?.slice(0, 10) === e.published &&
+      documents?.some((d) => {
+        try {
+          return (
+            decodeURIComponent(new URL(d.url).pathname) ===
+            `/sites/default/files/2026-05/${e.documentName}`
+          );
+        } catch {
+          return false;
+        }
+      }),
+  );
 }
 
 function officialUrl(href: string, base: string): string | undefined {
@@ -147,10 +185,16 @@ export function parseBilaspur(
     const cppp = (referenceNumber + " " + title).match(
       /\b\d{4}_[A-Z0-9]+_\d+_\d+\b/i,
     )?.[0];
-    const reviewed = kind === "gem" ? reviewedConflict(documents, publishDate) : undefined;
-    const matchesReviewedConflict = reviewed && !extendedClosingDate && originalClosingDate?.slice(0, 10) === reviewed.listed;
+    const reviewed =
+      kind === "gem" ? reviewedConflict(documents, publishDate) : undefined;
+    const matchesReviewedConflict =
+      reviewed &&
+      !extendedClosingDate &&
+      originalClosingDate?.slice(0, 10) === reviewed.listed;
     if (matchesReviewedConflict) {
-      notes.push(`Reviewed deadline conflict: listing ${originalClosingDate}; original bid document ${reviewed.documentDeadline}. Current deadline requires verification.`);
+      notes.push(
+        `Reviewed deadline conflict: listing ${originalClosingDate}; original bid document ${reviewed.documentDeadline}. Current deadline requires verification.`,
+      );
       originalClosingDate = undefined;
     }
     const statusText = [
@@ -161,7 +205,8 @@ export function parseBilaspur(
     records.push({
       title,
       referenceNumber,
-      tenderId: bid || cppp || (matchesReviewedConflict ? reviewed?.bid : undefined),
+      tenderId:
+        bid || cppp || (matchesReviewedConflict ? reviewed?.bid : undefined),
       sourceId: `aiims-bilaspur-${kind}`,
       sourceName: names[kind],
       sourceUrl: url,
@@ -269,19 +314,25 @@ export function createBilaspurAdapter(kind: Kind): TenderSourceAdapter {
         }
       }
       // Read only expressly labelled deadlines; arbitrary dates in specifications are never deadlines.
-      const promising = records.filter(
-        (r) =>
-          classifyMedical(r.title).isMedical &&
-          !r.cancelled &&
-          !r.withdrawn &&
-          (!r.originalClosingDate ||
-            closingDeadlineTimestamp(
-              r.datePrecision === "day"
-                ? (r.extendedClosingDate || r.originalClosingDate)?.slice(0, 10)
-                : r.extendedClosingDate || r.originalClosingDate,
-            ) >= Date.now() ||
-            r.corrigenda?.length),
-      );
+      const promising = records
+        .filter(
+          (r) =>
+            (classifyMedical(r.title).isMedical ||
+              genericPriorityCandidate(r)) &&
+            !r.cancelled &&
+            !r.withdrawn &&
+            (!r.originalClosingDate ||
+              closingDeadlineTimestamp(
+                r.datePrecision === "day"
+                  ? (r.extendedClosingDate || r.originalClosingDate)?.slice(
+                      0,
+                      10,
+                    )
+                  : r.extendedClosingDate || r.originalClosingDate,
+              ) >= Date.now() ||
+              r.corrigenda?.length),
+        )
+        .sort((a, b) => priorityRank(b) - priorityRank(a));
       const deferredDocuments = promising
         .slice(12)
         .filter(
@@ -336,7 +387,9 @@ export function createBilaspurAdapter(kind: Kind): TenderSourceAdapter {
               const reviewed = reviewedConflict(r.documents, r.publishDate);
               if (
                 reviewed &&
-                r.notes?.some((note) => note.startsWith("Reviewed deadline conflict:")) &&
+                r.notes?.some((note) =>
+                  note.startsWith("Reviewed deadline conflict:"),
+                ) &&
                 (correction
                   ? documentBid !== reviewed.bid || !deadline
                   : !deadline || deadline.slice(0, 10) !== reviewed.listed)

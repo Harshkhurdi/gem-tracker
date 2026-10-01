@@ -1,0 +1,336 @@
+import type {
+  ParsedDocument,
+  SpecificationItem,
+  SpecificationSection,
+  TenderSpecification,
+  PriorityEquipment,
+} from "../../types/specification";
+
+type Rule = [SpecificationSection, string, RegExp];
+const rules: Rule[] = [
+  [
+    "technicalRequirements",
+    "Patient population",
+    /\b(?:adult|pa?ediatric|neonatal|infant)\b/i,
+  ],
+  [
+    "technicalRequirements",
+    "Ventilation modes",
+    /\b(?:vcv|pcv|simv|psv|cpap|bipap|prvc|aprv|niv(?:-st)?|hfnc|volume control|pressure control|pressure support|volume support|spontaneous ventilation|adaptive ventilation|closed.loop|apn(?:ea|oea) backup|recruitment man)\b/i,
+  ],
+  [
+    "technicalRequirements",
+    "Ventilation parameters",
+    /\b(?:tidal volume|respiratory rate|peep|fio2|i:e ratio|inspiratory (?:time|pressure)|trigger sensitivity|minute volume)\b/i,
+  ],
+  [
+    "technicalRequirements",
+    "Monitoring",
+    /\b(?:etco2|spo2|nibp|ibp|airway pressure|ppeak|pmean|pplat|(?:lung|dynamic|static) compliance|airway resistance|pressure.volume loop|flow.volume loop|trends|temperature monitoring)\b/i,
+  ],
+  [
+    "technicalRequirements",
+    "Battery",
+    /\b(?:battery|batteries|hot.swappable|shock count|charge time)\b/i,
+  ],
+  [
+    "technicalRequirements",
+    "Gas supply",
+    /\b(?:oxygen hose|medical air hose|nist|diss|pipeline pressure|compressed.air|turbine|compressor|paramagnetic|galvanic|fuel cell)\b/i,
+  ],
+  [
+    "technicalRequirements",
+    "Alarms",
+    /\b(?:alarm|disconnection|gas supply failure)\b/i,
+  ],
+  [
+    "technicalRequirements",
+    "Ultrasound probes",
+    /\b(?:convex|curvilinear|linear probe|phased array|endocavitary|transvaginal|tvs|transrectal|microconvex|matrix probe|volume probe|tee probe|transducer|active ports)\b/i,
+  ],
+  [
+    "technicalRequirements",
+    "Ultrasound imaging modes",
+    /\b(?:b.mode|m.mode|colou?r doppler|power doppler|pw doppler|cw doppler|tissue doppler|spectral doppler)\b/i,
+  ],
+  [
+    "technicalRequirements",
+    "Advanced imaging",
+    /\b(?:elastograph\w*|ceus|3d|4d|stic|needle guidance|needle enhancement|fusion imaging|microvascular|auto imt|auto ef|speckle reduction|compound imaging|fluorescence|icg|nir|nbi|chromoendoscopy)\b/i,
+  ],
+  [
+    "technicalRequirements",
+    "Display and image technology",
+    /\b(?:screen|display|resolution|touchscreen|medical.grade monitor|full hd|4k|cmos|ccd|3.chip|camera head)\b/i,
+  ],
+  [
+    "technicalRequirements",
+    "Data and connectivity",
+    /\b(?:dicom|pacs|usb|ssd|storage|network|event review|code summary|nurse.call integration|bed monitoring)\b/i,
+  ],
+  [
+    "technicalRequirements",
+    "Defibrillation",
+    /\b(?:biphasic|monophasic|energy steps|max\w* energy|joules|cardioversion|manual mode|aed mode)\b/i,
+  ],
+  [
+    "technicalRequirements",
+    "Pacing",
+    /\b(?:pacing|transcutaneous|demand mode|fixed mode)\b/i,
+  ],
+  ["technicalRequirements", "ECG", /\b(?:3.lead|5.lead|12.lead|ecg|ekg)\b/i],
+  [
+    "technicalRequirements",
+    "Bed platform and functions",
+    /\b(?:[345].section|mattress sections?|motorized|motorised|actuator|backrest|knee rest|height adjustment|trendelenburg|chair position|cardiac chair|auto contour|one.touch cpr|manual cpr|electric cpr|side rails?|castors?|central locking|directional lock|safe working load|swl|patient capacity|bed.exit|brake alarm|weighing scale|angle indicators)\b/i,
+  ],
+  [
+    "technicalRequirements",
+    "Endoscopy system",
+    /\b(?:gastroscope|colonoscope|duodenoscope|bronchoscope|cystoscope|ureteroscope|hysteroscope|arthroscope|laparoscope|flexible scope|rigid scope|image processor|video processor|endoscopy processor|light source|insufflat\w*|irrigation pump|arthroscopy pump|smoke evacuation|hf generator|electrosurgical generator|monopolar|bipolar|vessel sealing)\b/i,
+  ],
+  [
+    "accessories",
+    "Accessories and quantities",
+    /\b(?:accessor\w*|humidif\w*|flow sensors?|expiratory (?:valve|cassette)|support arm|trolley|mounting bracket|paddles?|multifunction pads?|defibrillation pads?|pacing pads?|cuffs?|printer|ups|isolation transformer|gel warmer|probe holders?|biopsy guide|iv pole|lifting pole|cylinder holder|urine bag holder|drainage holder|monitor shelf|linen shelf|bed extension|bumper|(?:biopsy|alligator|triprong) forceps|path finder|formalin chamber|cleaning adapt(?:er|or)|snares?|injection needles?|graspers?|retrieval baskets?|guidewires?|suction valves?|air.water valves?|biopsy valves?|cleaning adapters?|leak tester|aer|automated endoscope reprocessor|washing unit|drying cabinet|scope (?:storage )?cabinet|cleaning brushes)\b/i,
+  ],
+  [
+    "consumables",
+    "Consumables",
+    /\b(?:consumable\w*|breathing circuits?|heated wire|disposable chamber|full face mask|oronasal mask|nasal mask|nasal pillows|headgear|bacterial filter|viral filter|hmef?|hepa|inspiratory filter|expiratory filter|printer paper|mattress|air cells|cleaning brush|detergent)\b/i,
+  ],
+  ["warranty", "Warranty", /\b(?:warranty|guarantee period)\b/i],
+  [
+    "cmc",
+    "CMC / AMC duration and coverage",
+    /\b(?:cmc|camc|amc|comprehensive maintenance|annual maintenance|after warranty|spares? included|labou?r included|consumables excluded|accessories excluded)\b/i,
+  ],
+  [
+    "serviceRequirements",
+    "Lifecycle support",
+    /\b(?:uptime|down.?time|response time|breakdown|preventive maintenance|penalt\w*|standby|software upgrade|firmware upgrade|service (?:engineer|centre|center)|bending rubber|insertion tube|biopsy channel|light guide bundle|control body)\b/i,
+  ],
+  [
+    "regulatoryRequirements",
+    "Regulatory requirements",
+    /\b(?:cdsco|bis|iso(?: 13485)?|ce certif\w*|ce mark\w*|ce(?=\s+(?:and|or|approved|required|certified))|us ?fda|fda(?: 510)?|iec 60601(?:-2-4)?|nabl|aerb)\b/i,
+  ],
+  [
+    "bidderEligibility",
+    "Bidder eligibility",
+    /\b(?:turnover|past experience|similar supply|performance certificates?|oem|manufacturer authori[sz]ation|\bmaf\b|installed base|number of installations|years in manufacturing|non.blacklist\w*|gst|pan registration|pan no|msme|mse relaxation|make in india|class.i local supplier|class.ii local supplier|local content)\b/i,
+  ],
+  [
+    "delivery",
+    "Delivery, installation and training",
+    /\b(?:delivery (?:period|within|schedule|time|days)|installation|commissioning|site readiness|site modification|training|demonstration|sample requirement|proof.of.concept)\b/i,
+  ],
+  [
+    "commercialTerms",
+    "Commercial terms",
+    /\b(?:emd|bid security|pbg|performance (?:security|guarantee)|bid validity|bid offer validity|payment|retention|delivery location|exemption)\b/i,
+  ],
+  [
+    "quantity",
+    "Quantity / line items",
+    /\b(?:total quantity|quantity|qty|\d+\s*(?:units?|nos\.?|pieces?|sets?))\b/i,
+  ],
+];
+export const emptySections = (): TenderSpecification["sections"] => ({
+  technicalRequirements: [],
+  accessories: [],
+  consumables: [],
+  serviceRequirements: [],
+  warranty: [],
+  cmc: [],
+  regulatoryRequirements: [],
+  bidderEligibility: [],
+  delivery: [],
+  commercialTerms: [],
+  quantity: [],
+});
+export function extractSpecifications(
+  documents: ParsedDocument[],
+  equipmentTypes: PriorityEquipment[],
+  now = new Date(),
+): TenderSpecification {
+  const result: TenderSpecification = {
+    extractionStatus: "document-unavailable",
+    equipmentTypes,
+    sections: emptySections(),
+    documentSources: documents.map(
+      ({ pages: _pages, productText: _text, links: _links, ...d }) => {
+        void _pages;
+        void _text;
+        void _links;
+        return d;
+      },
+    ),
+    extractedAt: now.toISOString(),
+    notes: [],
+    supersededRequirements: [],
+  };
+  // Date ordering is required before an amendment can override a current value.
+  const ordered = [...documents].sort(
+    (a, b) =>
+      Number(a.type === "corrigendum") - Number(b.type === "corrigendum") ||
+      Date.parse(a.publishedDate || "0") - Date.parse(b.publishedDate || "0"),
+  );
+  for (const doc of ordered) {
+    if (doc.status !== "parsed") continue;
+    let inDiscovery = false;
+    for (const page of doc.pages) {
+      const lines = page.text
+        .replace(/\r/g, "")
+        .split("\n")
+        .map((s) => s.replace(/\s+/g, " ").trim())
+        .filter(Boolean);
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        if (
+          /searched (?:strings|result)|gemarpts|categories selected for notification/i.test(
+            line,
+          )
+        )
+          inDiscovery = true;
+        if (
+          /minimum average|oem average|technical specifications?|bidder eligibility|additional terms|buyer added/i.test(
+            line,
+          )
+        )
+          inDiscovery = false;
+        if (
+          page.sheet &&
+          line
+            .split(" | ")
+            .every((c) =>
+              /^(?:item description|description of item|specification|quantity|qty|unit|consignee)$/i.test(
+                c,
+              ),
+            )
+        )
+          continue;
+        if (
+          inDiscovery ||
+          /^(?:page \d+|-- \d+ of \d+ --)$/i.test(line) ||
+          line.length < 3
+        )
+          continue;
+        // Preserve adjacent wrapped values but never pull an unrelated section heading.
+        const next = lines[i + 1];
+        const text =
+          line.length < 100 &&
+          /[:/]$/.test(line) &&
+          next &&
+          !rules.some(([, , p]) => p.test(next))
+            ? `${line} ${next}`
+            : line;
+        for (const [section, field, pattern] of rules) {
+          if (!pattern.test(text)) continue;
+          const item: SpecificationItem = {
+            field:
+              section === "accessories"
+                ? pattern.exec(text)?.[0] || field
+                : field,
+            requirement: text.slice(0, 1600),
+            mandatory: /\b(?:optional|not required|not mandatory)\b/i.test(text)
+              ? false
+              : /\b(?:shall|must|required|mandatory)\b/i.test(text)
+                ? true
+                : "unknown",
+            sourceDocument: doc.url,
+            sourceLabel: doc.label,
+            sourcePage: page.page,
+            sourceSheet: page.sheet,
+            sourceRow: page.row,
+            confidence: "high",
+          };
+          if (/\b(?:qty|quantity)\s*[.:=]?\s*\d+/i.test(text))
+            item.quantity = text.match(
+              /\b(?:qty|quantity)\s*[.:=]?\s*(\d+(?:\.\d+)?)/i,
+            )?.[1];
+          item.quantity ||= text.match(
+            /\b(\d+(?:\.\d+)?)\s*(?:units?|nos?\.?|pieces?|sets?)\b/i,
+          )?.[1];
+          if (
+            doc.type === "corrigendum" &&
+            /read as|replac\w*|amend\w*|revis\w*|instead of|changed to/i.test(
+              text,
+            )
+          ) {
+            item.value = text.match(
+              /(?:read as|changed to|replaced (?:by|with))\s*[:–-]?\s*(.+)$/i,
+            )?.[1];
+            const previous = result.sections[section].filter(
+              (x) => x.field === item.field,
+            );
+            // Multiple undated amendments have no defensible precedence.
+            if (previous.length > 1) {
+              result.notes.push(
+                "An amendment overlaps multiple clauses under the same field; clause precedence requires official review.",
+              );
+            } else if (
+              doc.publishedDate ||
+              documents.filter((d) => d.type === "corrigendum").length === 1
+            ) {
+              result.supersededRequirements.push(
+                ...previous.map((x) => ({ ...x, supersededBy: doc.url })),
+              );
+              result.sections[section] = result.sections[section].filter(
+                (x) => x.field !== item.field,
+              );
+            } else
+              result.notes.push(
+                "Undated amendments contain overlapping requirements; precedence requires official review.",
+              );
+          }
+          if (
+            !result.sections[section].some(
+              (x) =>
+                x.field === item.field && x.requirement === item.requirement,
+            )
+          )
+            result.sections[section].push(item);
+        }
+      }
+    }
+  }
+  const parsed = documents.filter((d) => d.status === "parsed");
+  const technical = parsed.some(
+    (d) =>
+      d.type === "technical-specification" ||
+      /^\s*(?:\d+[.)]\s*)?technical specifications?\b/im.test(
+        d.pages.map((p) => p.text).join("\n"),
+      ),
+  );
+  result.extractionStatus = parsed.length
+    ? documents.every(
+        (d) => d.status === "parsed" && d.textMethod !== "reviewed-scan",
+      ) &&
+      !result.notes.some((n) =>
+        /precedence requires official review/i.test(n),
+      ) &&
+      technical &&
+      result.sections.technicalRequirements.length > 0
+      ? "complete"
+      : "partial"
+    : documents.length
+      ? "document-unavailable"
+      : "not-processed";
+  result.notes.push(
+    "Requirements are exact document excerpts. Missing fields mean not identified; portfolio relevance does not establish compliance. Complete means all linked documents in this inspection were parsed, not an eligibility assessment.",
+  );
+  if (documents.some((d) => d.textMethod === "reviewed-scan"))
+    result.notes.push(
+      "Selected source scan excerpts were visually reviewed and reused only after matching the freshly fetched document hash. Automated extraction is incomplete; additional attachments may be unavailable.",
+    );
+  if (documents.some((d) => d.status === "scanned"))
+    result.notes.push(
+      "Specification document appears scanned; automated extraction incomplete.",
+    );
+  if (documents.some((d) => d.status === "deferred"))
+    result.notes.push(
+      "Additional linked documents are deferred by the bounded processing budget.",
+    );
+  return result;
+}

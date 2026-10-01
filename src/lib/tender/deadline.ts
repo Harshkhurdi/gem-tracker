@@ -12,7 +12,7 @@ export function extractSubmissionDeadline(
 ): SubmissionDeadline | undefined {
   const cleaned = text.replace(/\u00a0/g, " ");
   const labels =
-    /\b(?:(?:revised|extended|new)\s+)?(?:bid\s+(?:submission\s+)?end\s+date(?:\s*(?:\/|&|and)\s*time)?|(?:bid\s+)?submission\s+(?:end\s+date|deadline)|closing\s+date(?:\s*(?:\/|&|and)\s*time)?|last\s+date(?:\s*(?:\/|&|and)\s*time)?(?:\s+(?:for|of)\s+(?:bid\s+|tender\s+)?submission(?:\s+of\s+(?:bids?|tenders?))?)?|due\s+date|end\s+date)\b/gi;
+    /\b(?:(?:revised|extended|new)\s+)?(?:bid\s+(?:submission\s+)?end\s+date(?:\s*(?:\/|&|and)\s*time)?|(?:bid\s+)?submission\s+(?:end\s+date|deadline)|closing\s+date(?:\s*(?:\/|&|and)\s*time)?|last\s+date(?:\s+of\s+receiving\s+quotations?)?(?:\s*(?:\/|&|and)\s*time)?(?:\s+(?:for|of)\s+(?:bid\s+|tender\s+)?submission(?:\s+of\s+(?:bids?|tenders?))?)?|due\s+date|end\s+date)\b/gi;
   const datePattern =
     /^(?:\d{4}-\d{2}-\d{2}(?:[T ]\d{1,2}:\d{2}(?::\d{2})?(?:Z|[+-]\d{2}:\d{2})?)?|\d{1,2}[-/. ](?:\d{1,2}|[A-Za-z]{3,9})[-/. ,]+\d{4}(?:\s+\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM)?)?)(?!\d)/i;
   const candidates: (SubmissionDeadline & { revised: boolean })[] = [];
@@ -31,9 +31,11 @@ export function extractSubmissionDeadline(
       index + match[0].length + 140,
     );
     // GeM bilingual field labels can put Hindi between the English label and date.
-    const remainder = after.replace(/^[\s:;=\-–/()\u0900-\u097f]+/, "");
-    const rawDate = remainder.match(datePattern)?.[0];
+    const remainder = after.replace(/^[\s:;=\-–/()\u0900-\u097f]+/, "").replace(/^,?\s*i\.e\.,?\s*on\s+/i, "");
+    let rawDate = remainder.match(datePattern)?.[0];
     if (!rawDate) continue;
+    const explicitTime=remainder.slice(rawDate.length).match(/^,?\s*Time\s*:?\s*(\d{1,2}:\d{2}(?::\d{2})?)\b/i);
+    if(dayOnly(rawDate) && explicitTime)rawDate+=` ${explicitTime[1]}`;
     const date = parseIndianDate(rawDate, dayOnly(rawDate));
     if (!date) continue;
     candidates.push({

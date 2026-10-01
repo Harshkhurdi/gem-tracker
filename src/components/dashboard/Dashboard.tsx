@@ -1,4 +1,6 @@
 "use client";
+import Specifications from "./Specifications";
+import { PRIORITY_EQUIPMENT } from "@/lib/config/priority-equipment";
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -105,6 +107,11 @@ function TenderRows({
                   · {label(t.procurementScope)}
                 </div>
                 <div className="tag-list">
+                  {!!t.priorityCategories?.length && (
+                    <span className="priority-equipment-badge">
+                      Priority equipment
+                    </span>
+                  )}
                   {t.categories.map((c) => (
                     <span className="category-tag" key={c}>
                       {label(c)}
@@ -136,18 +143,27 @@ function TenderRows({
                     Published: {date(t.publishDate)} · Checked:{" "}
                     {date(t.checkedAt, true)} IST
                   </p>
-                  {(t.tenderCategory || t.productCategory || t.procurementCategory || t.workCategory) && (
+                  {(t.tenderCategory ||
+                    t.productCategory ||
+                    t.procurementCategory ||
+                    t.workCategory) && (
                     <dl className="official-categories">
                       {[
                         ["Tender category", t.tenderCategory],
                         ["Official product category", t.productCategory],
                         ["Procurement category", t.procurementCategory],
                         ["Work category", t.workCategory],
-                      ].filter(([, value]) => value).map(([name, value]) => (
-                        <div key={name}><dt>{name}</dt><dd>{value}</dd></div>
-                      ))}
+                      ]
+                        .filter(([, value]) => value)
+                        .map(([name, value]) => (
+                          <div key={name}>
+                            <dt>{name}</dt>
+                            <dd>{value}</dd>
+                          </div>
+                        ))}
                     </dl>
                   )}
+                  <Specifications tender={t} />
                   {t.originalClosingDate && (
                     <p>
                       Original deadline: {date(t.originalClosingDate)}
@@ -274,6 +290,7 @@ export default function Dashboard() {
   const [scope, setScope] = useState("");
   const [status, setStatus] = useState("active");
   const [category, setCategory] = useState("");
+  const [priorityEquipment, setPriorityEquipment] = useState("");
   const [brand, setBrand] = useState("");
   const [explicit, setExplicit] = useState(false);
   const [prioritize, setPrioritize] = useState(true);
@@ -369,6 +386,7 @@ export default function Dashboard() {
           scope,
           status,
           category,
+          priorityEquipment,
           brand,
           explicit,
           source,
@@ -386,6 +404,7 @@ export default function Dashboard() {
       scope,
       status,
       category,
+      priorityEquipment,
       brand,
       explicit,
       source,
@@ -402,6 +421,7 @@ export default function Dashboard() {
     setScope("");
     setStatus("active");
     setCategory("");
+    setPriorityEquipment("");
     setBrand("");
     setExplicit(false);
     setPrioritize(true);
@@ -556,6 +576,42 @@ export default function Dashboard() {
         </nav>
         {tab === "opportunities" && (
           <>
+            <section
+              className="priority-equipment-panel"
+              aria-label="Priority equipment opportunities"
+            >
+              <div className="filter-heading">
+                <h2>Priority equipment opportunities</h2>
+                <span>Active opportunities</span>
+              </div>
+              <div className="priority-equipment-grid">
+                {PRIORITY_EQUIPMENT.map((p) => (
+                  <button
+                    key={p.id}
+                    className={priorityEquipment === p.id ? "selected" : ""}
+                    aria-pressed={priorityEquipment === p.id}
+                    onClick={() => {
+                      reset();
+                      setPriorityEquipment(p.id);
+                    }}
+                  >
+                    <span>{p.label}</span>
+                    <strong>
+                      {
+                        tenders.filter(
+                          (t) =>
+                            active(t) && t.priorityCategories?.includes(p.id),
+                        ).length
+                      }
+                    </strong>
+                  </button>
+                ))}
+              </div>
+              <p className="muted">
+                Counts cover the monitored sources. Unknown deadlines remain
+                available under All statuses or Deadline unknown.
+              </p>
+            </section>
             <section className="filter-panel" aria-label="Filter opportunities">
               <div className="filter-heading">
                 <h2>Find your next opportunity</h2>
@@ -569,9 +625,24 @@ export default function Dashboard() {
                   type="search"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Search equipment, institution, brand or tender reference…"
+                  placeholder="Search equipment, specs, institution, brand or tender reference…"
                 />
               </label>
+              {priorityEquipment && (
+                <p>
+                  Priority equipment filter:{" "}
+                  {
+                    PRIORITY_EQUIPMENT.find((p) => p.id === priorityEquipment)
+                      ?.label
+                  }{" "}
+                  <button
+                    className="text-button"
+                    onClick={() => setPriorityEquipment("")}
+                  >
+                    Clear priority filter
+                  </button>
+                </p>
+              )}
               <div className="filter-grid">
                 <label>
                   Region
@@ -726,7 +797,7 @@ export default function Dashboard() {
                       ? "Verified and likely active records."
                       : "Records matching your filters."}{" "}
                     {prioritize
-                      ? "Matches for your seven portfolios appear first; the selected sort applies within each group. "
+                      ? "Closing urgency comes first; priority equipment and portfolio relevance break equal-deadline ties. "
                       : "All medical equipment follows the selected sort. "}
                     Dates shown in Indian Standard Time.
                   </p>

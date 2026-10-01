@@ -48,7 +48,7 @@ export const institutions: Institution[] = [
     ],
     institutionType: "central-government",
     operationalStatus: "operational",
-    sourceIds: ["aiims-bathinda"],
+    sourceIds: ["aiims-bathinda", "aiims-bathinda-open", "cppp-aiims-bathinda"],
     officialUrl: "https://www.aiimsbathinda.edu.in",
   },
   {
@@ -263,7 +263,7 @@ export const institutions: Institution[] = [
     operationalStatus: "operational",
     sourceIds: [
       "aiims-bilaspur-gem",
-      "aiims-bilaspur-cppp",
+      "aiims-bilaspur-cppp", "cppp-aiims-bilaspur",
       "aiims-bilaspur-niq",
     ],
     officialUrl: "https://www.aiimsbilaspur.edu.in",
@@ -286,7 +286,7 @@ export const institutions: Institution[] = [
     ],
     institutionType: "state-government",
     operationalStatus: "operational",
-    sourceIds: ["hp-dmer", "hpmscl", "hp-pwd"],
+    sourceIds: ["hp-health", "hp-dmer", "hpmscl", "hp-pwd"],
     officialUrl: "https://www.igmcshimla.edu.in",
   },
   {
@@ -307,7 +307,7 @@ export const institutions: Institution[] = [
     ],
     institutionType: "state-government",
     operationalStatus: "operational",
-    sourceIds: ["hp-dmer", "hpmscl", "hp-pwd"],
+    sourceIds: ["hp-health", "hp-dmer", "hpmscl", "hp-pwd"],
     officialUrl: "https://hptenders.gov.in",
   },
   {
@@ -329,7 +329,7 @@ export const institutions: Institution[] = [
     ],
     institutionType: "state-government",
     operationalStatus: "operational",
-    sourceIds: ["hp-dmer", "hpmscl"],
+    sourceIds: ["hp-health", "hp-dmer", "hpmscl"],
     officialUrl: "https://rpgmc.ac.in",
   },
   {
@@ -351,7 +351,7 @@ export const institutions: Institution[] = [
     ],
     institutionType: "state-government",
     operationalStatus: "operational",
-    sourceIds: ["hp-dmer", "hpmscl", "slbsgmc"],
+    sourceIds: ["hp-health", "hp-dmer", "hpmscl", "slbsgmc"],
     officialUrl: "https://www.slbsgmchmandi.com/tender",
   },
   {
@@ -373,7 +373,7 @@ export const institutions: Institution[] = [
     ],
     institutionType: "state-government",
     operationalStatus: "operational",
-    sourceIds: ["hp-dmer", "hpmscl"],
+    sourceIds: ["hp-health", "hp-dmer", "hpmscl"],
     officialUrl: "https://hptenders.gov.in",
   },
   {
@@ -394,7 +394,7 @@ export const institutions: Institution[] = [
     ],
     institutionType: "state-government",
     operationalStatus: "operational",
-    sourceIds: ["hp-dmer", "hpmscl"],
+    sourceIds: ["hp-health", "hp-dmer", "hpmscl"],
     officialUrl: "https://hptenders.gov.in",
   },
   {
@@ -414,7 +414,7 @@ export const institutions: Institution[] = [
     ],
     institutionType: "state-government",
     operationalStatus: "operational",
-    sourceIds: ["hp-dmer", "hpmscl"],
+    sourceIds: ["hp-health", "hp-dmer", "hpmscl"],
     officialUrl: "https://hptenders.gov.in",
   },
 ];

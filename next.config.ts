@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 const config: NextConfig = {
   poweredByHeader: false,
-  serverExternalPackages: ["pdf-parse"],
+  serverExternalPackages: ["pdf-parse", "exceljs"],
   // PDF.js resolves workers/native polyfills dynamically. Explicitly include
   // them in Vercel's function trace; a full local node_modules masks omissions.
   outputFileTracingIncludes: {
