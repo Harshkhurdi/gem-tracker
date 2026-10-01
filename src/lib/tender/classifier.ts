@@ -1,5 +1,6 @@
 import type { BrandMatch, MedicalCategory } from "../../types/tender";
 import { MEDICAL_RULES, NONMEDICAL_PATTERNS } from "../config/medical-taxonomy";
+import { productEvidence } from "./product-evidence";
 import { BRAND_PORTFOLIOS } from "../config/brand-portfolios";
 
 const occurrences = (text: string, pattern: RegExp): string[] =>
@@ -17,10 +18,19 @@ export function classifyMedical(
   confidence: number;
   isMedical: boolean;
 } {
+  const distinctScope = scopeText !== text;
+  text = productEvidence(text);
+  scopeText = productEvidence(scopeText);
+  if (distinctScope) text = [scopeText, text].filter(Boolean).join("\n");
   const categories: MedicalCategory[] = [],
     keywords: string[] = [];
   for (const rule of MEDICAL_RULES) {
-    const matches = occurrences(text, rule.pattern);
+    // PET/CT is a hybrid modality, not evidence of a standalone CT opportunity.
+    const clinicalText =
+      rule.category === "CT"
+        ? text.replace(/\bpet\s*[/-]?\s*ct(?:\s+scanner)?/gi, "")
+        : text;
+    const matches = occurrences(clinicalText, rule.pattern);
     if (matches.length) {
       categories.push(rule.category);
       keywords.push(...matches);
@@ -42,10 +52,16 @@ export function matchBrands(
   categories?: MedicalCategory[],
   scopeText = text,
 ): BrandMatch[] {
+  const distinctScope = scopeText !== text;
+  text = productEvidence(text);
+  scopeText = productEvidence(scopeText);
+  if (distinctScope) text = [scopeText, text].filter(Boolean).join("\n");
   const matches: BrandMatch[] = [];
   if (hasNonmedicalScope(text, scopeText)) return matches;
   const medical = classifyMedical(text, scopeText);
-  const relevantCategories = categories ?? medical.categories;
+  const relevantCategories = categories
+    ? medical.categories.filter((c) => categories.includes(c))
+    : medical.categories;
   for (const portfolio of BRAND_PORTFOLIOS) {
     const brands = occurrences(text, portfolio.aliases),
       models = occurrences(text, portfolio.models).filter(
@@ -69,8 +85,12 @@ export function matchBrands(
       });
       continue;
     }
-    const relevant = relevantCategories.filter((c) =>
-      portfolio.categories.includes(c),
+    const relevant = relevantCategories.filter(
+      (c) =>
+        portfolio.categories.includes(c) &&
+        (!portfolio.categoryEvidence?.[c] ||
+          portfolio.categoryEvidence[c]!.test(text)) &&
+        !portfolio.categoryExclusions?.[c]?.test(text),
     );
     // Respiratory and generic furniture categories alone do not identify a portfolio.
     const terms = portfolio.clinicalTerms

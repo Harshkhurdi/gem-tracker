@@ -9,7 +9,7 @@ import type {
 import { parseIndianDate, dayOnly } from "@/lib/tender/dates";
 import { matchInstitutions } from "@/lib/tender/institution-matcher";
 import { classifyMedical } from "@/lib/tender/classifier";
-import { SourceHttp } from "../http";
+import { SourceHttp, sanitizeError } from "../http";
 export interface NicConfig {
   id: string;
   name: string;
@@ -209,12 +209,18 @@ export function enrichNicDetail(
     ],
   };
 }
-function parseCorrigendum(html: string, url: string): Corrigendum {
+export function parseNicCorrigendum(
+  html: string,
+  url: string,
+  tenderId: string,
+): Corrigendum {
   const stripped = clean(html).split(/Details Before Corrigendum/i)[0];
   const { $, map } = cells(stripped);
   const body = normalized($.root().text());
   if (!/Published Corrigendum Details/i.test(body))
     throw new Error("Corrigendum detail unavailable");
+  if ((map.get("Tender ID :") || map.get("Tender ID")) !== tenderId)
+    throw new Error("Corrigendum tender ID mismatch or missing");
   const rows = $("tr")
     .toArray()
     .map((tr) =>
@@ -356,7 +362,7 @@ export function createNicAdapter(config: NicConfig): TenderSourceAdapter {
           } catch (e) {
             partial = true;
             notes.push(
-              `Organisation fetch failed: ${e instanceof Error ? e.message : String(e)}`,
+              `Organisation fetch failed: ${sanitizeError(e)}`,
             );
           }
         }
@@ -416,9 +422,10 @@ export function createNicAdapter(config: NicConfig): TenderSourceAdapter {
                   }
                   for (const c of needed.slice(0, 2)) {
                     try {
-                      const detail = parseCorrigendum(
+                      const detail = parseNicCorrigendum(
                         await http.text(sessionUrl(c.url!)),
                         c.url!,
+                        raw.tenderId!,
                       );
                       Object.assign(c, detail);
                       if (
@@ -433,7 +440,7 @@ export function createNicAdapter(config: NicConfig): TenderSourceAdapter {
                       partial = true;
                       corrFailure = true;
                       notes.push(
-                        `Corrigendum verification failed for ${raw.tenderId}: ${e instanceof Error ? e.message : String(e)}`,
+                        `Corrigendum verification failed for ${raw.tenderId}: ${sanitizeError(e)}`,
                       );
                     }
                   }
@@ -450,7 +457,7 @@ export function createNicAdapter(config: NicConfig): TenderSourceAdapter {
                 } catch (e) {
                   partial = true;
                   notes.push(
-                    `Detail verification failed for ${raw.tenderId}: ${e instanceof Error ? e.message : String(e)}`,
+                    `Detail verification failed for ${raw.tenderId}: ${sanitizeError(e)}`,
                   );
                 }
               }
@@ -464,7 +471,7 @@ export function createNicAdapter(config: NicConfig): TenderSourceAdapter {
       } catch (e) {
         return result(
           records.length ? "PARTIAL" : "UNAVAILABLE",
-          e instanceof Error ? e.message : String(e),
+          sanitizeError(e),
         );
       }
     },

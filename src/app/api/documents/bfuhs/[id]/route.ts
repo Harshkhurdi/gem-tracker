@@ -1,5 +1,7 @@
 import { load } from "cheerio";
 import { SourceHttp, officialUrl } from "@/lib/sources/http";
+import { bfuhsDocumentUrl } from "@/lib/sources/adapters/institution";
+import { parseIndianDate } from "@/lib/tender/dates";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 export async function GET(
@@ -17,6 +19,24 @@ export async function GET(
     const row = $("tr")
       .filter((_, r) => $(r).children("td").first().text().trim() === id)
       .first();
+    const direct = bfuhsDocumentUrl(
+      id,
+      parseIndianDate(row.children("td").eq(1).text()),
+    );
+    if (direct) {
+      try {
+        const bytes = await http.bytes(direct, 8_000_000);
+        if (new TextDecoder().decode(bytes.slice(0, 5)).startsWith("%PDF"))
+          return new Response(bytes as BodyInit, {
+            headers: {
+              "Content-Type": "application/pdf",
+              "Content-Disposition": `inline; filename="Tender_${id}.pdf"`,
+            },
+          });
+      } catch {
+        /* Old/renamed documents still use the official View postback below. */
+      }
+    }
     const event = (row.find("a").attr("href") || "").match(
       /__doPostBack\('([^']+)'/,
     )?.[1];

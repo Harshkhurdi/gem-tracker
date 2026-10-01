@@ -66,7 +66,7 @@ export const institutions: Institution[] = [
     ],
     institutionType: "central-government",
     operationalStatus: "operational",
-    sourceIds: ["esic"],
+    sourceIds: ["esic", "cppp-esic"],
     officialUrl: "https://esic.gov.in/tenders",
   },
   {

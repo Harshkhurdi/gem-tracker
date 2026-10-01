@@ -9,8 +9,9 @@ import {
   dayOnly,
   closingDeadlineTimestamp,
 } from "@/lib/tender/dates";
+import { extractSubmissionDeadline } from "@/lib/tender/deadline";
 import { classifyMedical } from "@/lib/tender/classifier";
-import { SourceHttp } from "../http";
+import { SourceHttp, sanitizeError } from "../http";
 
 type Kind = "gem" | "cppp" | "niq";
 const origin = "https://www.aiimsbilaspur.edu.in";
@@ -26,6 +27,21 @@ const names: Record<Kind, string> = {
   cppp: "AIIMS Bilaspur CPPP",
   niq: "AIIMS Bilaspur NIQ",
 };
+// Public official PDFs audited on 2026-10-01 contradict these exact listing
+// revisions. Retain that review across transient PDF failures. These are not
+// replacement deadlines: no current closing date is inferred from an old PDF.
+const reviewedConflicts = [
+  { documentName: "GeM tender for the Procurement of Endoscopic Spine System for the Department of Orthopaedics GeM bid No. GEM-2026-B-7421096..pdf", published: "2026-05-09", listed: "2026-11-09", documentDeadline: "2026-05-09T17:00:00+05:30", bid: "GEM/2026/B/7421096" },
+  { documentName: "GeM tender for the Procurement of Double Lumen Dialysis Catheter for the Department of Nephrology and Dialysis, AIIMS Bilaspur (H.P.) Vide GeM bid No..pdf", published: "2026-05-11", listed: "2026-11-11", documentDeadline: "2026-05-11T16:00:00+05:30", bid: "GEM/2026/B/7439204" },
+  { documentName: "GeM tender for the Procurement of Target Controlled Infusion Pumps for the Dept. of Anaesthesiology, AIIMS Bilaspur (H.P.).pdf", published: "2026-05-11", listed: "2026-11-11", documentDeadline: "2026-05-11T17:00:00+05:30", bid: "GEM/2026/B/7410483" },
+];
+function reviewedConflict(documents: RawTender["documents"], published?: string) {
+  return reviewedConflicts.find((e) => published?.slice(0, 10) === e.published && documents?.some((d) => {
+    try { return decodeURIComponent(new URL(d.url).pathname) === `/sites/default/files/2026-05/${e.documentName}`; }
+    catch { return false; }
+  }));
+}
+
 function officialUrl(href: string, base: string): string | undefined {
   try {
     const u = new URL(href, base);
@@ -131,6 +147,12 @@ export function parseBilaspur(
     const cppp = (referenceNumber + " " + title).match(
       /\b\d{4}_[A-Z0-9]+_\d+_\d+\b/i,
     )?.[0];
+    const reviewed = kind === "gem" ? reviewedConflict(documents, publishDate) : undefined;
+    const matchesReviewedConflict = reviewed && !extendedClosingDate && originalClosingDate?.slice(0, 10) === reviewed.listed;
+    if (matchesReviewedConflict) {
+      notes.push(`Reviewed deadline conflict: listing ${originalClosingDate}; original bid document ${reviewed.documentDeadline}. Current deadline requires verification.`);
+      originalClosingDate = undefined;
+    }
     const statusText = [
       title,
       value(8),
@@ -139,7 +161,7 @@ export function parseBilaspur(
     records.push({
       title,
       referenceNumber,
-      tenderId: bid || cppp,
+      tenderId: bid || cppp || (matchesReviewedConflict ? reviewed?.bid : undefined),
       sourceId: `aiims-bilaspur-${kind}`,
       sourceName: names[kind],
       sourceUrl: url,
@@ -155,7 +177,7 @@ export function parseBilaspur(
       documents,
       corrigenda,
       verification: "listing",
-      datePrecision: dayOnly(value(6) !== "-" ? value(6) : value(5))
+      datePrecision: dayOnly(extendedClosingDate ? value(6) : value(5))
         ? "day"
         : "minute",
       cancelled:
@@ -166,15 +188,6 @@ export function parseBilaspur(
     });
   });
   return records;
-}
-
-function explicitDeadline(text: string): string | undefined {
-  const pattern =
-    /(?:Bid End Date\s*\/\s*Time|Bid Submission End Date(?:\s*&\s*Time)?|Last Date(?:\s*(?:and|&)\s*Time)?(?:\s*for)?\s*(?:of\s*)?Submission)\s*[:\-]?\s*(\d{1,2}[-/.]\d{1,2}[-/.]\d{4})(?:\s+(\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM)?))?/i;
-  const match = clean(text).match(pattern);
-  return match
-    ? parseIndianDate(`${match[1]} ${match[2] || ""}`, !match[2])
-    : undefined;
 }
 
 export function createBilaspurAdapter(kind: Kind): TenderSourceAdapter {
@@ -190,14 +203,14 @@ export function createBilaspurAdapter(kind: Kind): TenderSourceAdapter {
     async fetch(): Promise<SourceFetchResult> {
       const started = Date.now();
       const attemptedAt = new Date().toISOString();
-      const http = new SourceHttp({ budgetMs: 60000, timeoutMs: 18000 });
+      const http = new SourceHttp({ budgetMs: 90000, timeoutMs: 18000 });
       const records: RawTender[] = [];
       const notes: string[] = [];
       let partial = false;
       let detailChecks = 0;
       let fetchedPages = 0;
       let error: string | undefined;
-      for (let page = 0; page < 2; page++) {
+      for (let page = 0; page < 10; page++) {
         const pageUrl = page ? `${url}?page=${page}` : url;
         try {
           const html = await http.text(pageUrl);
@@ -242,14 +255,14 @@ export function createBilaspurAdapter(kind: Kind): TenderSourceAdapter {
             .filter((u) => new URL(u).pathname === new URL(url).pathname)
             .map((u) => Number(new URL(u).searchParams.get("page") || 0));
           if (!nextPages.some((n) => n > page)) break;
-          if (page === 1) {
+          if (page === 9) {
             partial = true;
             notes.push(
-              "Pagination capped at two pages; additional official records remain unchecked.",
+              "Pagination capped at ten pages; additional official records remain unchecked.",
             );
           }
         } catch (e) {
-          error = e instanceof Error ? e.message : String(e);
+          error = sanitizeError(e);
           partial = true;
           notes.push(`Page ${page + 1} unavailable: ${error}`);
           break;
@@ -267,10 +280,10 @@ export function createBilaspurAdapter(kind: Kind): TenderSourceAdapter {
                 ? (r.extendedClosingDate || r.originalClosingDate)?.slice(0, 10)
                 : r.extendedClosingDate || r.originalClosingDate,
             ) >= Date.now() ||
-            r.corrigenda?.some((c) => c.type === "extension")),
+            r.corrigenda?.length),
       );
       const deferredDocuments = promising
-        .slice(3)
+        .slice(12)
         .filter(
           (r) =>
             r.documents?.length ||
@@ -281,42 +294,106 @@ export function createBilaspurAdapter(kind: Kind): TenderSourceAdapter {
       if (deferredDocuments) {
         partial = true;
         notes.push(
-          `${deferredDocuments} relevant document checks deferred by the three-document limit.`,
+          `${deferredDocuments} relevant document checks deferred by the twelve-record document limit.`,
         );
       }
-      for (const r of promising.slice(0, 3)) {
-        const correction = r.corrigenda?.find((c) =>
-          /extension/i.test(c.title || ""),
-        );
-        const docUrl = correction?.url || r.documents?.[0]?.url;
-        if (!docUrl) continue;
-        detailChecks++;
-        try {
-          const text = await http.documentText(docUrl);
-          const deadline = text ? explicitDeadline(text) : undefined;
-          if (deadline) {
-            if (correction) {
-              r.extendedClosingDate = deadline;
-              correction.revisedClosingDate = deadline;
-            } else if (!r.extendedClosingDate) {
-              r.originalClosingDate = deadline;
+      const candidates = promising.slice(0, 12);
+      for (let offset = 0; offset < candidates.length; offset += 3) {
+        await Promise.all(
+          candidates.slice(offset, offset + 3).map(async (r) => {
+            const correction = [...(r.corrigenda || [])]
+              .reverse()
+              .sort(
+                (a, b) =>
+                  Date.parse(b.publishedDate || "") -
+                  Date.parse(a.publishedDate || ""),
+              )[0];
+            const docUrl = correction?.url || r.documents?.[0]?.url;
+            if (!docUrl) return;
+            detailChecks++;
+            try {
+              const text = await http.documentText(docUrl);
+              const documentBid = text
+                ?.match(/GEM\s*\/\s*\d{4}\s*\/\s*[A-Z]\s*\/\s*\d+/i)?.[0]
+                .replace(/\s/g, "")
+                .toUpperCase();
+              if (
+                r.tenderId?.startsWith("GEM/") &&
+                documentBid &&
+                r.tenderId !== documentBid
+              ) {
+                partial = true;
+                r.notes?.push(
+                  "Attached document bid identity differs from listing; deadline not applied.",
+                );
+                return;
+              }
+              if (!r.tenderId && documentBid) r.tenderId = documentBid;
+              const extracted = text
+                ? extractSubmissionDeadline(text)
+                : undefined;
+              const deadline = extracted?.date;
+              const reviewed = reviewedConflict(r.documents, r.publishDate);
+              if (
+                reviewed &&
+                r.notes?.some((note) => note.startsWith("Reviewed deadline conflict:")) &&
+                (correction
+                  ? documentBid !== reviewed.bid || !deadline
+                  : !deadline || deadline.slice(0, 10) !== reviewed.listed)
+              ) {
+                partial = true;
+                return;
+              }
+              if (deadline) {
+                if (correction) {
+                  if (
+                    r.extendedClosingDate &&
+                    r.extendedClosingDate.slice(0, 10) !== deadline.slice(0, 10)
+                  ) {
+                    partial = true;
+                    r.notes?.push(
+                      `Attached amendment deadline ${deadline} differs from current listed extension ${r.extendedClosingDate}; listing extension retained pending review.`,
+                    );
+                    return;
+                  }
+                  r.extendedClosingDate = deadline;
+                  correction.revisedClosingDate = deadline;
+                } else if (!r.extendedClosingDate) {
+                  if (
+                    r.originalClosingDate &&
+                    r.originalClosingDate.slice(0, 10) !== deadline.slice(0, 10)
+                  ) {
+                    // A currently listed date may be an unlinked amendment. Neither
+                    // conflicting source supports an actionable deadline on its own.
+                    r.notes?.push(
+                      `Deadline conflict: listing ${r.originalClosingDate}; original bid document ${deadline}. Current deadline requires verification.`,
+                    );
+                    r.originalClosingDate = undefined;
+                    partial = true;
+                    return;
+                  }
+                  r.originalClosingDate = deadline;
+                }
+                if (correction || !r.extendedClosingDate)
+                  r.datePrecision = extracted!.datePrecision;
+                r.verification = "listing";
+                r.notes?.push(
+                  "Deadline read from explicitly labelled official document field.",
+                );
+              } else {
+                partial = true;
+                notes.push(
+                  "An attached document could not be read or its deadline could not be verified; affected tender retains listing verification.",
+                );
+              }
+            } catch {
+              partial = true;
+              notes.push(
+                "Some document checks failed; listing records retained.",
+              );
             }
-            r.datePrecision = /T23:59:59/.test(deadline) ? "day" : "minute";
-            // A mirror PDF verifies its published deadline, not live GeM cancellation/status.
-            r.verification = "listing";
-            r.notes?.push(
-              "Deadline read from explicitly labelled official document field.",
-            );
-          } else if (correction) {
-            partial = true;
-            notes.push(
-              "A date-extension document could not be verified; affected tender retains listing verification.",
-            );
-          }
-        } catch {
-          partial = true;
-          notes.push("Some document checks failed; listing records retained.");
-        }
+          }),
+        );
       }
       if (records.some((r) => r.corrigenda?.length && !r.extendedClosingDate)) {
         partial = true;

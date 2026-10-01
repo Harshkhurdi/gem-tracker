@@ -21,6 +21,7 @@ npm test
 npm run build
 npm start
 npm run fetch:live
+npm run audit:data -- --output /tmp/tender-audit
 ```
 
 `fetch:live` runs the real source adapters and prints genuine success/failure and relevance counts. It never populates production with test fixtures. Government source availability changes by network, hour and hosting region. A successful build is not proof every source can be fetched from Vercel.
@@ -30,6 +31,8 @@ npm run fetch:live
 Import `https://github.com/Harshkhurdi/gem-tracker.git`, choose the **Next.js** preset, and use the repository root. Vercel uses `npm install` and `npm run build`. Do not select static export: the source adapters need Node Route Handlers.
 
 The application starts without any environment variables. Node-specific source/PDF libraries stay in server modules; scraper routes explicitly use `runtime = 'nodejs'`. Long aggregation routes declare a 300-second maximum duration, supported with Vercel Fluid Compute. If your project plan or settings impose a shorter duration, increase its function duration or query fewer sources; first cold requests may exceed a 60-second limit. PDF documents are bounded to 8 MB; HTML to 6 MB. No browser runtime or local storage service is required.
+
+The build explicitly traces PDF workers and native polyfills and checks that the API deployment includes them. This avoids a successful local parse depending on files omitted from a Vercel function. The build guard reads generated traces only during compilation; it is not runtime persistence.
 
 ### Environment variables
 
@@ -46,8 +49,9 @@ Never use `NEXT_PUBLIC_` for these values. No actual credentials are committed.
 The registry is data-driven in `src/lib/sources/registry.ts`:
 
 - AIIMS Bathinda official dated GeM bid mirror, with PDF links.
-- AIIMS Bilaspur official **GeM**, **CPPP** and **NIQ** tables, independently parsed; two-page and document-check caps are reported.
+- AIIMS Bilaspur official **GeM**, **CPPP** and **NIQ** tables, independently parsed; ten-page and twelve-record document-check safeguards are reported; observed listings currently fit within those bounds.
 - CPPP PGIMER organisation listings.
+- CPPP ESIC organisation listings, matched to Ludhiana; independent of the unavailable ESIC office site and GeM-only coverage.
 - Punjab eProcurement DMER, Health & Family Welfare / PHSC, Finance / PIDB.
 - Chandigarh Administration eProcurement.
 - Himachal eProcurement DMER, **HPMSCL**, and PWD.
@@ -83,7 +87,11 @@ Strong negative context rejects office/computer monitors and chairs, hostel furn
 
 Active status uses the **effective closing date**, not publication age. There is no 60-day publication restriction. Date-only deadlines use the end of the Indian day and remain likely. Missing or invalid dates stay unknown. Fresh checked official details can be `ACTIVE_VERIFIED`; institution mirrors or incomplete checks remain `ACTIVE_LIKELY`. Corrections/withdrawals/cancellations take precedence where publicly exposed. New deadline fields and true corrigenda are read before historical "before corrigendum" dates. The open dashboard recalculates expired deadlines and downgrades old verification as the IST date changes. Documents, corrigenda and source provenance survive deduplication; older merged amendment evidence does not overwrite the selected record's newer deadline.
 
-The source detail parser cannot guarantee every cancellation or amendment was mirrored. It reports failed checks and caps. A document with scanned text yields no inferred deadline; there is no mandatory OCR. BOQ downloads behind portal CAPTCHA are not fetched.
+Samsung generic CT portfolio matching requires mobile/portable CT evidence; fixed high-slice and PET/CT systems do not automatically qualify. Proprietary SpyGlass devices do not imply a KARL STORZ opportunity. Admission and examination notices are excluded from medical procurement.
+
+GeM PDF classification uses the declared item, technical specifications and the listing title. GeMARPTS search results, notification categories, help/history and administrative clauses cannot create product categories, portfolio matches, explicit brand/model mentions or confidence. Deadline extraction separately retains access to the original document text.
+
+The source detail parser cannot guarantee every cancellation or amendment was mirrored. It reports failed checks and caps. Scanned documents never yield guessed deadlines; there is no mandatory OCR. A small reviewed-document metadata manifest contains fields visually transcribed from official scans during the audit. A field is applied only after fetching that exact official URL and verifying its SHA-256 against the reviewed bytes; changed files revert to ordinary extraction/unknown dates. This does not verify later amendments, and records remain listing-level/likely. BOQ downloads behind portal CAPTCHA are not fetched.
 
 ## Cache and refresh
 
@@ -102,3 +110,7 @@ There is no cron requirement and no reminder automation. `GET /api/tenders` expo
 ## Structure
 
 `src/types` defines public contracts; `src/lib/config` holds institutions, taxonomy and portfolios; `src/lib/sources/adapters` holds official source readers; `src/lib/tender` normalizes, matches, resolves dates/status and deduplicates; `src/lib/cache` handles Next/optional Redis caching; `src/app/api` contains Node backend routes; `src/components/dashboard` contains the responsive UI. Test fixtures exist only under `tests`.
+
+## Second production data audit
+
+[AUDIT.md](AUDIT.md) records the individual audit of all 25 baseline active opportunities, final refreshed records, institution coverage, unknown-deadline breakdown and genuine source limitations. These audit observations are documentation, not runtime seed data. `audit:data` optionally exports source snapshots, normalized data and diagnostics to a chosen development directory; the production application never depends on these filesystem exports.

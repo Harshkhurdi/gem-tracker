@@ -242,3 +242,146 @@ describe("requested portfolio products and narrowly scoped accessories", () => {
     },
   );
 });
+
+describe("production portfolio precision", () => {
+  it.each([
+    "Procurement of Digital PET/CT Scanner 128 Slice",
+    "PET-CT scanner",
+    "PET CT scanner",
+  ])(
+    "retains hybrid imaging without inventing a Samsung CT opportunity: %s",
+    (text) => {
+      expect(classifyMedical(text).categories).toEqual(["DIAGNOSTIC_IMAGING"]);
+      expect(matchBrands(text)).toEqual([]);
+    },
+  );
+  it("retains fixed CT as clinical but limits Samsung generic CT to its mobile scope", () => {
+    const title = "Rate Contract of 256 SLICE CT SCANER";
+    expect(classifyMedical(title).categories).toContain("CT");
+    expect(matchBrands(title)).toEqual([]);
+    expect(matchBrands("portable computed tomography scanner")).toContainEqual(
+      expect.objectContaining({
+        brand: "Samsung Healthcare",
+        matchType: "portfolio",
+      }),
+    );
+    expect(matchBrands("Samsung CT scanner")).toContainEqual(
+      expect.objectContaining({
+        brand: "Samsung Healthcare",
+        matchType: "explicit-brand",
+      }),
+    );
+  });
+  it("keeps proprietary SpyGlass clinical without claiming a KARL STORZ opportunity", () => {
+    const title =
+      "Procurement of Spy Glass Digital Controller for Gastroenterology";
+    expect(classifyMedical(title).categories).toContain("ENDOSCOPY");
+    expect(matchBrands(title)).toEqual([]);
+    expect(
+      matchBrands("SpyGlass controller and laparoscopic instruments"),
+    ).toContainEqual(
+      expect.objectContaining({ brand: "KARL STORZ", matchType: "portfolio" }),
+    );
+  });
+  it.each(["Clinical fluoroscopy system", "Digital fluoroscopy machine"])(
+    "retains ambiguous fluoroscopy as imaging without inferring a C-arm: %s",
+    (text) => {
+      expect(classifyMedical(text).categories).toEqual(["DIAGNOSTIC_IMAGING"]);
+      expect(matchBrands(text)).toEqual([]);
+    },
+  );
+  it.each([
+    ["Xray machine", "XRAY_DR", "Samsung Healthcare"],
+    ["X ray machines", "XRAY_DR", "Skanray"],
+    ["CArm machine", "C_ARM", "Skanray"],
+    ["C-Arms for clinical fluoroscopy", "C_ARM", "Skanray"],
+    ["Multi Parameter Monitor", "PATIENT_MONITORING", "Spacelabs Healthcare"],
+    ["Multi-parameters monitors", "PATIENT_MONITORING", "Skanray"],
+    ["Haemostasis analyser", "COAGULATION", "Medcaptain"],
+    ["Hemostasis analyzer", "COAGULATION", "Medcaptain"],
+  ])("recognizes procurement spelling %s", (text, category, brand) => {
+    expect(classifyMedical(text).categories).toContain(category);
+    expect(matchBrands(text)).toContainEqual(
+      expect.objectContaining({ brand, matchType: "portfolio" }),
+    );
+  });
+  it.each([
+    ["Samsung ultrasound", "Samsung Healthcare"],
+    ["Hamilton ventilator", "Hamilton Medical"],
+    ["Karl Storz endoscope", "KARL STORZ"],
+    ["LINET hospital bed", "LINET"],
+    ["Medcaptain infusion pump", "Medcaptain"],
+    ["Spacelabs patient monitor", "Spacelabs Healthcare"],
+    ["Skanray C-arm", "Skanray"],
+  ])("preserves explicit manufacturer evidence: %s", (text, brand) =>
+    expect(matchBrands(text)).toContainEqual(
+      expect.objectContaining({ brand, matchType: "explicit-brand" }),
+    ),
+  );
+  it("rejects office works mentioning clinical boilerplate", () => {
+    const title = "Office works and office supplies";
+    const body = `${title}; buyer department uses patient monitors and ultrasound`;
+    expect(classifyMedical(body, title).isMedical).toBe(false);
+    expect(matchBrands(body, undefined, title)).toEqual([]);
+  });
+});
+
+describe("nonprocurement educational notices", () => {
+  it.each([
+    "Diploma Radiography Admission Notice & Forms",
+    "Radiography admission forms",
+    "Radiography examination results",
+    "Radiography course fees",
+  ])("excludes %s", (text) => {
+    expect(classifyMedical(text).isMedical).toBe(false);
+    expect(matchBrands(text)).toEqual([]);
+  });
+  it("retains actual equipment bids for teaching", () => {
+    expect(
+      classifyMedical(
+        "Supply of radiography equipment for Diploma course teaching laboratory",
+      ).isMedical,
+    ).toBe(true);
+  });
+});
+
+describe("source-backed broad clinical procurements", () => {
+  it.each([
+    "E- tender fro the procurement of various equipement for Department of Orthopaedic surgery(Trauma Centre), IGMC Shimla.",
+    "Mahinery and equipment for Deptt of Pathology under DIAMONDS project",
+  ])("retains %s without guessing portfolio", (text) => {
+    expect(classifyMedical(text).categories).toEqual([
+      "OTHER_MEDICAL_EQUIPMENT",
+    ]);
+    expect(matchBrands(text)).toEqual([]);
+  });
+  it("does not derive medical scope from institution alone", () => {
+    expect(
+      classifyMedical("Procurement of equipment for office at IGMC Shimla")
+        .isMedical,
+    ).toBe(false);
+  });
+});
+
+describe("biochemistry procurement scope", () => {
+  it.each([
+    "GeM Bid for Procurement of Ammonia Kits and Controls – Department of Biochemistry",
+    "Biochemistry Reagent Kit for Human Samples (Q2)",
+    "NIQ for procurement of consumables for department of Biochemistry",
+  ])(
+    "retains laboratory procurement %s without guessing manufacturer",
+    (text) => {
+      expect(classifyMedical(text).categories).toEqual(["LAB_IVD"]);
+      expect(matchBrands(text)).toEqual([]);
+    },
+  );
+  it("requires laboratory context for ammonia kits and general consumables", () => {
+    expect(
+      classifyMedical("Ammonia kits and controls for industrial refrigeration")
+        .isMedical,
+    ).toBe(false);
+    expect(
+      classifyMedical("Consumables for administrative department").isMedical,
+    ).toBe(false);
+  });
+});

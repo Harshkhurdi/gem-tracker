@@ -69,6 +69,16 @@ export function parseIndianDate(
   )
     return;
   const z = iso?.[7] || "+05:30";
+  if (z !== "Z") {
+    const offset = z.match(/^[+-](\d{2}):(\d{2})$/);
+    if (
+      !offset ||
+      +offset[1] > 14 ||
+      +offset[2] > 59 ||
+      (+offset[1] === 14 && +offset[2] !== 0)
+    )
+      return;
+  }
   return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}T${String(h).padStart(2, "0")}:${String(minute).padStart(2, "0")}:${String(sec).padStart(2, "0")}${z}`;
 }
 export function dayOnly(value: string) {

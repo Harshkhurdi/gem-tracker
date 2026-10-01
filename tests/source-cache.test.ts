@@ -116,6 +116,18 @@ function finishInvalidationRequest() {
 }
 
 describe("Official source cache", () => {
+  it("does not publish arbitrary exception messages from adapters", async () => {
+    mocks.fetch.mockRejectedValue(
+      new Error("private-token-value in upstream config"),
+    );
+    const { cachedSource } = await import("@/lib/cache/source-cache");
+    const failure = await cachedSource("test-source");
+    expect(failure.status).toBe("UNAVAILABLE");
+    expect(failure.error).toBe(
+      "Official listing could not be retrieved or its format changed",
+    );
+    expect(JSON.stringify(failure)).not.toContain("private-token-value");
+  });
   it("invalidates a warm snapshot and persists the subsequent GET result", async () => {
     mocks.fetch.mockResolvedValueOnce(result("SUCCESS", "Old monitor"));
     const { cachedSource, invalidateSources } =

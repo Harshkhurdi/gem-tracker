@@ -5,6 +5,10 @@ export interface BrandPortfolio {
   models: RegExp;
   categories: MedicalCategory[];
   clinicalTerms?: RegExp;
+  /** Broad taxonomy categories need product-specific evidence for a portfolio. */
+  categoryEvidence?: Partial<Record<MedicalCategory, RegExp>>;
+  /** Proprietary competing devices are clinical evidence, not generic opportunities. */
+  categoryExclusions?: Partial<Record<MedicalCategory, RegExp>>;
   /** Common words require a matching clinical category before claiming a model. */
   ambiguousModels?: RegExp;
 }
@@ -16,6 +20,9 @@ export const BRAND_PORTFOLIOS: BrandPortfolio[] = [
       /\b(?:R20|GM85(?: Fit)?|GC85|GF85|BodyTom|OmniTom|S[ -]Hub|SMART Center)\b/i,
     ambiguousModels: /^(?:R20|SMART Center)$/i,
     categories: ["ULTRASOUND", "XRAY_DR", "CT"],
+    categoryEvidence: {
+      CT: /\b(?:BodyTom|OmniTom|(?:mobile|portable) (?:ct|computed tomography))\b/i,
+    },
   },
   {
     brand: "Hamilton Medical",
@@ -27,6 +34,7 @@ export const BRAND_PORTFOLIOS: BrandPortfolio[] = [
   },
   {
     brand: "KARL STORZ",
+    categoryExclusions: { ENDOSCOPY: /\bspy[ -]?glass\b/i },
     aliases: /\b(?:karl[ -]?storz|storz)\b/i,
     models:
       /\b(?:C[ -]MAC|HOPKINS|Rubina|IMAGE\s?1(?: S)?|TELE PACK|TELECAM|VITOM|AUTOCON|ENDOMAT|OR1)\b/i,

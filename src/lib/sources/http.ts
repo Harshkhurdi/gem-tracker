@@ -32,6 +32,25 @@ export function officialUrl(value: string, base?: string) {
     return;
   }
 }
+/** GMC Amritsar's official Wix PDF links redirect to this observed tenant. */
+export function officialDocumentRedirect(value: string, from: string) {
+  const generic = officialUrl(value, from);
+  if (generic) return generic;
+  try {
+    const source = new URL(from),
+      target = new URL(value, from);
+    if (
+      source.hostname === "www.gmc.edu.in" &&
+      /^\/_files\/ugd\/[^/]+\.pdf$/i.test(source.pathname) &&
+      target.protocol === "https:" &&
+      target.hostname === "bf8acbf3-d9c2-4d05-85d6-d9849a6e99ab.filesusr.com" &&
+      target.pathname === source.pathname.replace("/_files/", "/")
+    )
+      return target.href;
+  } catch {
+    /* malformed redirect */
+  }
+}
 export class SourceHttp {
   private cookies = new Map<string, Map<string, string>>();
   private deadline: number;
@@ -117,7 +136,10 @@ export class SourceHttp {
       }
       this.cookies.set(u.origin, current);
       if (response.status >= 300 && response.status < 400) {
-        const next = officialUrl(response.headers.get("location") || "", url);
+        const next = officialDocumentRedirect(
+          response.headers.get("location") || "",
+          url,
+        );
         if (!next) throw Error("Unrecognised source redirect");
         url = next;
         await response.body?.cancel();
@@ -165,11 +187,19 @@ export class SourceHttp {
   }
   async documentText(url: string): Promise<string | undefined> {
     try {
-      const bytes = await this.bytes(url, 8_000_000);
+      return await this.documentBytesText(await this.bytes(url, 8_000_000));
+    } catch {
+      return;
+    }
+  }
+  async documentBytesText(bytes: Uint8Array): Promise<string | undefined> {
+    try {
       if (!new TextDecoder().decode(bytes.slice(0, 5)).startsWith("%PDF"))
         return;
       const { PDFParse } = await import("pdf-parse");
-      const parser = new PDFParse({ data: bytes });
+      // PDF.js transfers its input buffer to a worker. Preserve the freshly
+      // downloaded bytes for content-hash verification after extraction.
+      const parser = new PDFParse({ data: bytes.slice() });
       try {
         const result = await parser.getText();
         return result.text.trim() || undefined;
@@ -184,9 +214,19 @@ export class SourceHttp {
 export function sanitizeError(error: unknown) {
   const text =
     error instanceof Error ? error.message : "Source could not be queried";
+  if (
+    [
+      "Official procurement table missing from response.",
+      "Official procurement table structure changed; populated rows could not be read.",
+      "Tender detail ID mismatch",
+      "Tender detail not present (session expired or access challenge)",
+    ].includes(text)
+  )
+    return text;
+  const status = text.match(/HTTP (\d{3})\b/);
   return /abort|timeout|timed|budget/i.test(text)
     ? "Official source timed out"
-    : /HTTP \d+/.test(text)
-      ? text
+    : status
+      ? `Official source HTTP ${status[1]}`
       : "Official listing could not be retrieved or its format changed";
 }

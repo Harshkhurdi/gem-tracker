@@ -4,12 +4,13 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build --webpack",
+    "build": "next build --webpack && node scripts/verify-build.mjs",
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "fetch:live": "node --import tsx scripts/live-validation.ts"
+    "fetch:live": "node --import tsx scripts/live-validation.ts",
+    "audit:data": "node --import tsx scripts/audit-data.ts"
   },
   "engines": {
     "node": ">=22.13.0"

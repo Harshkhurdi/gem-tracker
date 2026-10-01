@@ -1,102 +1,91 @@
 # Implementation validation
 
-Validated on **1 October 2026, 3:30 PM IST**, using real official-source snapshots and the built production Next.js application. These observed results are not a completeness guarantee or seeded application data. This report is not used by the runtime.
+Validated on **01 Oct 2026, 16:34 IST** using the built production Next.js application and real official sources. Full individual source, institution and active-record evidence is in [AUDIT.md](AUDIT.md). These observations are documentation, not runtime seed data.
 
 ## Build and automated checks
 
-- npm install: PASS
-- npm run lint: PASS
-- npm run typecheck: PASS (also checked without a pre-existing `.next` directory)
-- npm test: PASS — **179 tests across 10 files**
-- npm run build: PASS — Next.js 16.3.8 production build
+Install, lint, typecheck, 279 tests across 15 files and production build: **PASS**.
 
-## Production browser verification
+## Live counts
 
-Chromium exercised the actual production server, API and dashboard. Browser tooling was used only for development verification, not as a production scraper or dependency.
-
-- Protected administrator refresh: PASS. POST invalidates source snapshots, then the browser GET fetches new official-source snapshots; subsequent GET retained identical source-attempt timestamps without another upstream fetch.
-- Unauthorized and cross-origin refresh requests rejected: PASS.
-- All seven brand filters, including selected-brand explicit-only matching, agree with API records: PASS.
-- Default priority places matches for the seven portfolios ahead of other medical equipment: PASS.
-- All three region filters agree with API records: PASS.
-- Public Refresh results button reads cached data: PASS (359 ms in the browser check).
-- Cached initial production API read: 494 ms.
-- Diagnostics exposes all 23 institutions and all 18 source statuses: PASS.
-- Desktop and 390-pixel mobile screenshots inspected; no mobile page overflow or browser runtime errors: PASS.
-
-The administrator-refresh persistence check completed in one run. A later test-harness selector mismatch interrupted its remaining UI checks; correcting that harness selector and rerunning the controls against those same refreshed snapshots passed. The application did not require an additional upstream refresh for that UI rerun.
-
-## Live pipeline results
-
-| Metric | Count |
-| --- | ---: |
+| Metric | Observed |
+| --- | --- |
 | Institutions configured | 23 |
-| Adapters configured / attempted | 18 |
+| Adapters attempted | 19 |
 | SUCCESS | 6 |
-| PARTIAL | 8 |
+| PARTIAL | 9 |
 | UNAVAILABLE | 4 |
-| Raw records | 3029 |
-| Institution-matched records | 748 |
-| Medical matches before deduplication | 292 |
-| ACTIVE_VERIFIED | 11 |
-| ACTIVE_LIKELY | 14 |
-| Total active opportunities | 25 |
-| DEADLINE_UNKNOWN | 154 |
-| Expired, excluded by default | 105 |
+| Raw source records | 3718 |
+| Institution-matched raw records | 774 |
+| Medical rows before deduplication | 296 |
+| ACTIVE_VERIFIED | 6 |
+| ACTIVE_LIKELY | 20 |
+| DEADLINE_UNKNOWN | 144 |
+| Expired / excluded by default | 118 |
 | Cancelled / withdrawn | 0 |
-| Non-medical records rejected | 2576 |
-| Unassigned records rejected | 161 |
+| Nonmedical rejected | 2585 |
+| Unassigned rejected | 837 |
 | Duplicates removed | 8 |
-| Active statewide procurements | 4 |
+| Total active | 26 |
+| Active matching at least one of seven portfolios | 9 |
+| Institutions with active results | 11 |
+| Active statewide | 4 |
 
-Active institutional coverage: **10 institutions** — AIIMS Bathinda, AIIMS Bilaspur, PGIMER Chandigarh, GMC Amritsar, GMC Patiala, Pt JLNGMC Chamba, IGMC Shimla, AIMSS Chamiana, Dr RPGMC Tanda and Dr RKGMC Hamirpur. The four statewide opportunities are included in the total of 25, not additional to it.
+## Production browser checks
 
-## Source results
+| Check | Result |
+| --- | --- |
+| Production server starts | PASS |
+| Refresh rejects unauthorized and cross-origin requests | PASS |
+| All 19 configured source statuses returned | PASS |
+| Admin button accepts protected cache invalidation | PASS |
+| Admin button fetches new source snapshots and clears token | PASS |
+| Subsequent GET preserves refreshed snapshots without new upstream attempts | PASS |
+| Disputed Bilaspur deadlines remain unknown and CRRT has no boilerplate portfolio | PASS |
+| Default portfolio priority places all seven company portfolios first | PASS |
+| Seven brand filters and explicit-only results match the API | PASS |
+| Three region filters match the API | PASS |
+| Public Refresh results button reads current cache | PASS |
+| Mobile layout fits a 390px viewport | PASS |
+| BFUHS official document link returns PDF | PASS |
+| Diagnostics includes 23 institutions | PASS |
+| No browser runtime errors | PASS |
 
-| Adapter | Result | Raw records |
-| --- | --- | ---: |
+| Request | Milliseconds |
+| --- | --- |
+| initialReadMs | 155799 |
+| forcedRefreshMs | 174704 |
+| cachedReadMs | 567 |
+| browserCachedRefreshMs | 404 |
+
+## Source statuses
+
+| Adapter | Status | Raw records |
+| --- | --- | --- |
 | aiims-bathinda | SUCCESS | 208 |
 | aiims-bilaspur-gem | PARTIAL | 133 |
 | aiims-bilaspur-cppp | PARTIAL | 14 |
 | aiims-bilaspur-niq | PARTIAL | 127 |
-| cppp-pgimer | SUCCESS | 21 |
+| cppp-pgimer | PARTIAL | 24 |
 | punjab-dmer | PARTIAL | 9 |
-| punjab-phsc | SUCCESS | 24 |
+| punjab-phsc | SUCCESS | 22 |
 | punjab-pidb | SUCCESS | 1 |
-| chandigarh-eproc | SUCCESS | 169 |
-| hp-dmer | SUCCESS | 22 |
-| hpmscl | PARTIAL | 6 |
-| hp-pwd | UNAVAILABLE | 0 |
-| bfuhs | PARTIAL | 2192 |
+| chandigarh-eproc | SUCCESS | 171 |
+| hp-dmer | PARTIAL | 22 |
+| hpmscl | SUCCESS | 6 |
+| hp-pwd | UNAVAILABLE | 627 |
+| bfuhs | PARTIAL | 2193 |
 | gmc-patiala | PARTIAL | 93 |
 | gmc-amritsar | PARTIAL | 10 |
 | slbsgmc | UNAVAILABLE | 0 |
 | esic | UNAVAILABLE | 0 |
+| cppp-esic | SUCCESS | 58 |
 | gem-direct | UNAVAILABLE | 0 |
 
-The 18 adapters include the explicitly disabled direct-GeM connector; 17 perform official HTTP reads. SUCCESS means that the adapter retrieved its listing successfully, not that every procurement or later amendment is exhaustively covered. PARTIAL includes document-check limits and failed detail/corrigendum checks.
+## Limitations
 
-## Active portfolio matches
+No live Vercel deployment was performed. Direct GeM coverage is unavailable; official institutional mirrors are independent. Failed sources retain compatible previously verified records only when available and never advance verification dates. Details, scans and amendments are bounded; unknown dates stay unknown. Cold aggregation can exceed 60 seconds; API routes declare maxDuration 300. Actual access from the chosen Vercel region still needs deployment verification. See AUDIT.md for every current source limitation.
 
-| Portfolio | Matching active records |
-| --- | ---: |
-| Samsung Healthcare | 4 |
-| Hamilton Medical | 0 |
-| KARL STORZ | 7 |
-| LINET | 0 |
-| Medcaptain | 1 |
-| Spacelabs Healthcare | 0 |
-| Skanray | 7 |
+## PDF deployment trace verification
 
-Counts overlap when a tender matches more than one portfolio. Zero means no active match in this retrieved coverage, not that the portfolio is unsupported. Generic-product and explicit-brand/model tests cover all seven. Product relevance does not establish supplier eligibility.
-
-## Remaining source and deployment limitations
-
-- Direct GeM querying is unavailable. Official AIIMS institutional GeM mirrors are fetched independently and returned records.
-- HP PWD and SLBSGMCH timed out in this run. ESIC public listings could not be read. HP PWD had returned records in an earlier run; outages vary over time.
-- Punjab DMER had a failed corrigendum check; HPMSCL had two failed detail checks. Those sources are PARTIAL, and incomplete verification does not become ACTIVE_VERIFIED.
-- Bilaspur document checks are bounded; unresolved attachments and amendments require official-document review. BFUHS had six inaccessible relevant PDFs, leaving unverified dates unknown.
-- Institutional mirrors may omit later amendments. NIC listing/detail checks and pagination are bounded and expose limits. CAPTCHA-gated BOQs remain official links; no CAPTCHA bypass or mandatory OCR is used.
-- No live Vercel deployment was performed or verified. The Node production build and cache/browser behavior passed locally. Official-source access from the eventual Vercel region remains a deployment check.
-- Cold aggregation can exceed 60 seconds; routes declare maxDuration 300 for Vercel Fluid Compute. No runtime local persistence or daemon is required.
-- Without optional Redis, a cold instance with no previous snapshot cannot recover older records after an upstream outage. Warm refresh retains previous records when available and preserves their verification timestamps.
+The final production build includes PDF worker modules and native polyfills in both tender and diagnostics API traces. Parsing a real official breast-board PDF from a separate directory containing only traced dependencies returned the correct GEM/2026/B/8010657 identity and 28,861 text characters. No full repository node_modules fallback was used. `npm run build` now checks these assets automatically. This packaging check ran after the browser refresh and changed no source adapter logic or data.

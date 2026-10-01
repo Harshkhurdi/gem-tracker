@@ -1,7 +1,7 @@
 import { createNicAdapter } from "./adapters/nic";
 import { createBilaspurAdapter } from "./adapters/bilaspur";
 import { createInstitutionAdapter } from "./adapters/institution";
-import { esicAdapter } from "./adapters/esic";
+import { esicAdapter, cpppEsicAdapter } from "./adapters/esic";
 import type { TenderSourceAdapter } from "@/types/tender";
 const pb = [
   "gmc-patiala",
@@ -108,6 +108,7 @@ export const adapters: TenderSourceAdapter[] = [
   createInstitutionAdapter("gmc-amritsar"),
   createInstitutionAdapter("slbsgmc"),
   esicAdapter,
+  cpppEsicAdapter,
   {
     id: "gem-direct",
     name: "GeM direct public search",

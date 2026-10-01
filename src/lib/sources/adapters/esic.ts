@@ -1,4 +1,5 @@
 import { load } from "cheerio";
+import { createNicAdapter } from "./nic";
 import { SourceHttp, officialUrl } from "../http";
 import { runAdapter } from "../result";
 import { parseIndianDate } from "@/lib/tender/dates";
@@ -88,4 +89,30 @@ export const esicAdapter: TenderSourceAdapter = {
         ],
       };
     }),
+};
+
+// ESIC's own office-notice site can be unavailable while its public CPPP
+// organisation listing remains readable. Keep both sources visible: CPPP
+// ordinary tenders cannot establish coverage of GeM-only office notices.
+const esicCppp = createNicAdapter({
+  id: "cppp-esic",
+  name: "CPPP / ESIC Ludhiana",
+  origin: "https://eprocure.gov.in",
+  prefix: "/eprocure/app",
+  organisation: /^Employees State Insurance Corporation$/i,
+  region: "Punjab",
+  institutionIds: ["esic-ludhiana"],
+});
+export const cpppEsicAdapter: TenderSourceAdapter = {
+  ...esicCppp,
+  async fetch() {
+    const result = await esicCppp.fetch();
+    return {
+      ...result,
+      notes: [
+        ...result.notes,
+        "Checks public CPPP ESIC organisation tenders for Ludhiana; GeM-only and ESIC office-notice coverage remain separate.",
+      ],
+    };
+  },
 };

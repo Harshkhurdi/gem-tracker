@@ -1,6 +1,7 @@
 import { unstable_cache, revalidateTag } from "next/cache";
 import { getAdapter, adapters } from "@/lib/sources/registry";
 import { readDurable, writeDurable } from "./redis";
+import { sanitizeError } from "@/lib/sources/http";
 import type { SourceFetchResult } from "@/types/tender";
 const ttl = 900;
 // Data Cache persists snapshots; these bounded maps coalesce work and retain a
@@ -59,10 +60,7 @@ async function perform(id: string): Promise<SourceFetchResult> {
     try {
       result = await adapter.fetch();
     } catch (error) {
-      result = unavailable(
-        id,
-        error instanceof Error ? error.message : "Source request failed",
-      );
+      result = unavailable(id, sanitizeError(error));
     }
     if (result.status === "UNAVAILABLE")
       result = retain(
@@ -79,7 +77,9 @@ async function perform(id: string): Promise<SourceFetchResult> {
 function reader(id: string) {
   let fn = readers.get(id);
   if (!fn) {
-    fn = unstable_cache(async () => perform(id), ["medical-source-v2", id], {
+    // Document deadline checks changed in this audit. Never resurrect source
+    // snapshots produced before those checks through a later upstream failure.
+    fn = unstable_cache(async () => perform(id), ["medical-source-v3", id], {
       revalidate: ttl,
       tags: ["tender-source-" + id],
     });
@@ -110,12 +110,7 @@ export async function cachedSource(id: string): Promise<SourceFetchResult> {
     };
   } catch (error) {
     return retain(
-      unavailable(
-        id,
-        error instanceof Error
-          ? error.message
-          : "Source cache could not be read",
-      ),
+      unavailable(id, sanitizeError(error)),
       previousSnapshots.get(id) || (await readDurable(id)),
     );
   }

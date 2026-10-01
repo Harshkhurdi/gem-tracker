@@ -14,9 +14,9 @@ export const MEDICAL_RULES: MedicalRule[] = [
   {
     category: "XRAY_DR",
     pattern:
-      /\b(?:GM85(?: Fit)?|GC85|GF85|flat[ -]panel detectors?|x[ -]?ray|digital radiograph\w*|radiography|radiographic|dr system|computed radiography)\b/i,
+      /\b(?:GM85(?: Fit)?|GC85|GF85|flat[ -]panel detectors?|x[ -]?rays?|digital radiograph\w*|radiography|radiographic|dr system|computed radiography)\b/i,
   },
-  { category: "C_ARM", pattern: /\bc[ -]?arm\b/i },
+  { category: "C_ARM", pattern: /\bc[ -]?arms?\b/i },
   {
     category: "CT",
     pattern:
@@ -25,12 +25,12 @@ export const MEDICAL_RULES: MedicalRule[] = [
   {
     category: "DIAGNOSTIC_IMAGING",
     pattern:
-      /\b(?:mri|magnetic resonance|mammograph\w*|pet[ -]ct|medical imaging)\b/i,
+      /\b(?:(?:medical|clinical|digital) fluoroscop\w*|fluoroscopy (?:machine\w*|system\w*|equipment)|mri|magnetic resonance|mammograph\w*|pet\s*[/-]?\s*ct|medical imaging)\b/i,
   },
   {
     category: "PATIENT_MONITORING",
     pattern:
-      /\b(?:patient monitor\w*|icu monitor\w*|multiparameter monitor\w*|multi[ -]parameter monitor\w*|central (?:monitoring|nursing) station|telemetry|bedside monitor\w*|fetal monitor\w*|foetal monitor\w*|pulse oximeter\w*|capnograph\w*)\b/i,
+      /\b(?:patient monitor\w*|icu monitor\w*|multiparameter monitor\w*|multi[ -]?parameter(?:s)? monitor\w*|central (?:monitoring|nursing) station|telemetry|bedside monitor\w*|fetal monitor\w*|foetal monitor\w*|pulse oximeter\w*|capnograph\w*)\b/i,
   },
   {
     category: "VENTILATION",
@@ -108,12 +108,12 @@ export const MEDICAL_RULES: MedicalRule[] = [
   {
     category: "LAB_IVD",
     pattern:
-      /\b(?:ivd|in[ -]vitro diagnostic\w*|biochemistry analy[sz]er\w*|hematology analy[sz]er\w*|haematology analy[sz]er\w*|laboratory centrifuge\w*|microscope\w*|elisa|pcr machine\w*|blood gas analy[sz]er\w*)\b/i,
+      /\b(?:ammonia kits? and controls[^\n]{0,80}\b(?:department of )?biochemistry|consumables for (?:the )?(?:department|deptt?\.?) of biochemistry|biochemistry reagent kits?|ivd|in[ -]vitro diagnostic\w*|biochemistry analy[sz]er\w*|hematology analy[sz]er\w*|haematology analy[sz]er\w*|laboratory centrifuge\w*|microscope\w*|elisa|pcr machine\w*|blood gas analy[sz]er\w*)\b/i,
   },
   {
     category: "COAGULATION",
     pattern:
-      /\b(?:blood[ -]grouping(?: analy[sz]er\w*)?|coagulation analy[sz]er\w*|thromboelastograph\w*|teg system|teg analy[sz]er\w*)\b/i,
+      /\b(?:blood[ -]grouping(?: analy[sz]er\w*)?|(?:coagulation|ha?emostasis) (?:analy[sz]er\w*|system\w*)|thromboelastograph\w*|teg system|teg analy[sz]er\w*)\b/i,
   },
   {
     category: "MEDICAL_FURNITURE",
@@ -138,8 +138,8 @@ export const MEDICAL_RULES: MedicalRule[] = [
   {
     category: "OTHER_MEDICAL_EQUIPMENT",
     pattern:
-      /\b(?:eeg machines?|electroencephalograph\w*|pacemaker\w*|brachytherapy|radiotherapy equipment|medical equipments?|biopacemaker\w*|brachytherapy|radiotherapy equipment|medical equipments?|radiant warmer|\bcrrt\b|nephelometer|spectrofluorometer|uv[ -]?(?:vis|visible).*spectro|medical oxygen regulator|dialysis machine\w*|haemodialysis|hemodialysis|breast ?board\w*|picc training|(?:training|medical) manne?quin\w*|prosthetic\w*|colposcop\w*|suction (?:apparatus|machine|unit)|dvt pumps?|vte pumps?|spirometers?|autoclave\w*|sterilizer\w*|steriliser\w*|incubator for neonat\w*)\b/i,
+      /\b(?:equip(?:ment|ement) for (?:the )?(?:department|deptt?\.?) of (?:orthop(?:a)?edic surgery|pathology)|eeg machines?|electroencephalograph\w*|pacemaker\w*|brachytherapy|radiotherapy equipment|medical equipments?|biopacemaker\w*|radiant warmer|\bcrrt\b|nephelometer|spectrofluorometer|uv[ -]?(?:vis|visible).*spectro|medical oxygen regulator|dialysis machine\w*|haemodialysis|hemodialysis|breast ?board\w*|picc training|(?:training|medical) manne?quin\w*|prosthetic\w*|colposcop\w*|suction (?:apparatus|machine|unit)|dvt pumps?|vte pumps?|spirometers?|autoclave\w*|sterilizer\w*|steriliser\w*|incubator for neonat\w*)\b/i,
   },
 ];
 export const NONMEDICAL_PATTERNS =
-  /\b(?:electrical points|electrical works|electrical cabling|electrification|rewiring|engineering works|building construction|road construction|renovation|air condition(?:er|ing)|transformer|fire doors?|hostel furniture|office tables?|computer monitors?|desktop monitors?|cctv monitors?|traffic monitoring|water pumps?|submersible pumps?|centrifugal pumps?|sewage|sewerage|water treatment|water supply|office chairs?|office furniture|lcd (?:display|panel|monitor)|road (?:works|construction)|civil works?|dg set|diesel generator|stretcher elevators?|passenger elevators?|stretcher lifts?|passenger lifts?|elevators?|lift maintenance|elevator maintenance)\b/i;
+  /\b(?:electrical points|electrical works|electrical cabling|electrification|rewiring|engineering works|building construction|road construction|renovation|air condition(?:er|ing)|transformer|fire doors?|hostel furniture|office tables?|computer monitors?|desktop monitors?|cctv monitors?|traffic monitoring|water pumps?|submersible pumps?|centrifugal pumps?|sewage|sewerage|water treatment|water supply|office chairs?|office furniture|office work\w*|office supplies|admission (?:notices?|forms?|applications?|results?)|examination results?|course fees|lcd (?:display|panel|monitor)|road (?:works|construction)|civil works?|dg set|diesel generator|stretcher elevators?|passenger elevators?|stretcher lifts?|passenger lifts?|elevators?|lift maintenance|elevator maintenance)\b/i;

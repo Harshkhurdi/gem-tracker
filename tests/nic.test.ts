@@ -2,6 +2,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import {
   parseNicList,
   enrichNicDetail,
+  parseNicCorrigendum,
   createNicAdapter,
   type NicConfig,
 } from "../src/lib/sources/adapters/nic";
@@ -151,5 +152,36 @@ describe("NIC source completeness and endpoint", () => {
     expect(result.status).toBe("UNAVAILABLE");
     expect(result.records).toHaveLength(0);
     expect(result.successfulAt).toBeUndefined();
+  });
+});
+
+// Official corrigendum details repeat the tender ID with a colon label.
+// Session drift must never apply another tender's deadline.
+describe("NIC corrigendum identity", () => {
+  const current = `<h1>Published Corrigendum Details</h1><table>${field("Tender ID :", "2026_HPMSC_141463_1")}${field("Bid Submission End Date", "03-Oct-2026 03:00 PM")}</table><h2>Details Before Corrigendum</h2><table>${field("Bid Submission End Date", "18-Sep-2026 03:00 PM")}</table>`;
+  it("verifies the tender identity and uses only the revised critical dates", () => {
+    expect(
+      parseNicCorrigendum(
+        current,
+        "https://hptenders.gov.in/corr",
+        "2026_HPMSC_141463_1",
+      ).revisedClosingDate,
+    ).toBe("2026-10-03T15:00:00+05:30");
+  });
+  it("rejects another tender or a missing identity", () => {
+    expect(() =>
+      parseNicCorrigendum(
+        current,
+        "https://hptenders.gov.in/corr",
+        "2026_HPMSC_143790_1",
+      ),
+    ).toThrow("mismatch");
+    expect(() =>
+      parseNicCorrigendum(
+        current.replace("Tender ID :", "Unrelated"),
+        "https://hptenders.gov.in/corr",
+        "2026_HPMSC_141463_1",
+      ),
+    ).toThrow("missing");
   });
 });
