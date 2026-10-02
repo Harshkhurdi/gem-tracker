@@ -187,10 +187,10 @@ describe("deadline and client freshness transitions", () => {
       finalMillisecond,
     );
     expect(resolveStatus(t, new Date(finalMillisecond)).status).toBe(
-      "ACTIVE_VERIFIED",
+      "ACTIVE_LIKELY",
     );
     expect(refreshElapsedStatuses([t], finalMillisecond)[0].status).toBe(
-      "ACTIVE_VERIFIED",
+      "ACTIVE_LIKELY",
     );
     expect(refreshElapsedStatuses([t], finalMillisecond + 1)[0].status).toBe(
       "EXPIRED",
@@ -199,7 +199,8 @@ describe("deadline and client freshness transitions", () => {
   });
   it("downgrades verification across IST midnight without a network reload", () => {
     const t = {
-      ...tender("Samsung ultrasound"),
+      ...tender("Samsung ultrasound", "2026-10-07T17:00:00+05:30"),
+      datePrecision: "minute" as const,
       fetchedAt: "2026-10-01T23:58:00+05:30",
     };
     expect(

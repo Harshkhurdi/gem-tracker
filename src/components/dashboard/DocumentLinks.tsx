@@ -2,19 +2,13 @@
 import { useMemo, useState } from "react";
 import type { DashboardData, Tender } from "@/types/tender";
 import { filterAndSortTenders } from "@/lib/tender/dashboard-filter";
+import { displayDeadline } from "@/lib/tender/deadline-display";
+import { displaySourceText } from "@/lib/tender/display-text";
 import {
   GEM_BID_SEARCH, gemBidNumber, isGemTender, matchesDocumentView,
   needsManualPortal, tenderDocumentLinks, type DocumentView,
 } from "@/lib/tender/document-links";
 
-const formatter = new Intl.DateTimeFormat("en-IN", {
-  timeZone: "Asia/Kolkata", day: "2-digit", month: "short", year: "numeric",
-  hour: "2-digit", minute: "2-digit",
-});
-function deadline(value?: string) {
-  if (!value || Number.isNaN(Date.parse(value))) return "Deadline unknown";
-  return formatter.format(new Date(value)) + " IST";
-}
 export default function DocumentLinks({ tenders, data, clock }: {
   tenders: Tender[]; data: DashboardData | null; clock: number;
 }) {
@@ -92,9 +86,9 @@ export default function DocumentLinks({ tenders, data, clock }: {
               <div className="record-meta">{t.status.toLowerCase().replaceAll("_", " ")}</div>
             </td>
             <td data-label="Institution / deadline">
-              <strong>{t.institutionName || t.organisation || "Statewide / unassigned buyer"}</strong>
+              <strong>{t.institutionName || displaySourceText(t.organisation) || "Statewide / unassigned buyer"}</strong>
               <div className="record-meta">{t.region}</div>
-              <div className="record-meta">Tracked deadline: {deadline(t.effectiveClosingDate)}</div>
+              <div className="record-meta">Tracked deadline: {displayDeadline(t)}</div>
             </td>
             <td data-label="Official links">
               <div className="document-links">

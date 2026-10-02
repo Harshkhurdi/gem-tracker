@@ -1,7 +1,7 @@
 import { reviewedScanPages } from "./reviewed-scans";
 import { createHash } from "node:crypto";
 import { load } from "cheerio";
-import { unzipSync } from "fflate";
+import { Inflate } from "fflate";
 import type {
   DocumentPage,
   ParsedDocument,
@@ -52,44 +52,79 @@ export function linkedDocuments(
   });
   return [...new Map(found.map((d) => [d.url, d])).values()];
 }
-// Inspect ZIP directory first, bounding expansion before any XML is parsed.
+// Inspect ZIP directory and actual expansion before any XML is parsed.
 export function validateXlsx(bytes: Uint8Array): void {
-  if (
-    bytes.length > 8_000_000 ||
-    new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(
-      0,
-      true,
-    ) !== 0x04034b50
-  )
-    throw Error("Unsupported BOQ format");
+  const invalid = () => { throw Error("Invalid ZIP workbook directory"); };
+  if (bytes.length < 22 || bytes.length > 8_000_000) invalid();
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  let size = 0,
-    entries = 0;
-  for (let i = 0; i + 46 <= bytes.length; i++)
-    if (view.getUint32(i, true) === 0x02014b50) {
-      const expanded = view.getUint32(i + 24, true),
-        nameLength = view.getUint16(i + 28, true),
-        extra = view.getUint16(i + 30, true),
-        comment = view.getUint16(i + 32, true);
-      const name = new TextDecoder().decode(
-        bytes.slice(i + 46, i + 46 + nameLength),
-      );
-      if (/vbaProject|\.bin$|externalLinks\//i.test(name))
-        throw Error("Macro or external-link workbook is unsupported");
-      size += expanded;
-      entries++;
-      if (size > 24_000_000 || entries > 300 || expanded > 12_000_000)
-        throw Error("BOQ expanded size limit exceeded");
-      i += 45 + nameLength + extra + comment;
+  if (view.getUint32(0, true) !== 0x04034b50)
+    throw Error("Unsupported BOQ format");
+  // Follow the same end-of-central-directory record that the ZIP reader uses.
+  // Searching for directory signatures in file payloads does not validate a ZIP.
+  let end = bytes.length - 22;
+  while (end >= Math.max(0, bytes.length - 65558) && view.getUint32(end, true) !== 0x06054b50) end--;
+  if (end < Math.max(0, bytes.length - 65558)) invalid();
+  if (end + 22 + view.getUint16(end + 20, true) !== bytes.length ||
+      view.getUint16(end + 4, true) || view.getUint16(end + 6, true)) invalid();
+  const count = view.getUint16(end + 10, true),
+    directorySize = view.getUint32(end + 12, true),
+    directoryStart = view.getUint32(end + 16, true);
+  if (!count || count > 300 || count !== view.getUint16(end + 8, true) ||
+      directoryStart + directorySize !== end || directoryStart >= end ||
+      (end >= 20 && view.getUint32(end - 20, true) === 0x07064b50)) invalid();
+  let cursor = directoryStart, size = 0;
+  const names = new Set<string>();
+  for (let entry = 0; entry < count; entry++) {
+    if (cursor + 46 > end || view.getUint32(cursor, true) !== 0x02014b50) invalid();
+    const flags = view.getUint16(cursor + 8, true),
+      method = view.getUint16(cursor + 10, true),
+      compressed = view.getUint32(cursor + 20, true),
+      expanded = view.getUint32(cursor + 24, true),
+      nameLength = view.getUint16(cursor + 28, true),
+      extra = view.getUint16(cursor + 30, true),
+      comment = view.getUint16(cursor + 32, true),
+      local = view.getUint32(cursor + 42, true);
+    if (cursor + 46 + nameLength + extra + comment > end || !nameLength ||
+        view.getUint16(cursor + 34, true) || (flags & 1) || ![0, 8].includes(method)) invalid();
+    const nameBytes = bytes.slice(cursor + 46, cursor + 46 + nameLength);
+    const name = new TextDecoder().decode(nameBytes);
+    if (names.has(name) || /(?:^|[\\/])\.\.(?:[\\/]|$)|^[/\\]|\0/.test(name)) invalid();
+    names.add(name);
+    if (/vbaProject|\.bin$|externalLinks[\\/]/i.test(name))
+      throw Error("Macro or external-link workbook is unsupported");
+    size += expanded;
+    if (size > 24_000_000 || expanded > 12_000_000)
+      throw Error("BOQ expanded size limit exceeded");
+    if (local + 30 > directoryStart || view.getUint32(local, true) !== 0x04034b50) invalid();
+    const localNameLength = view.getUint16(local + 26, true),
+      localExtra = view.getUint16(local + 28, true),
+      dataStart = local + 30 + localNameLength + localExtra;
+    if (view.getUint16(local + 6, true) !== flags || view.getUint16(local + 8, true) !== method ||
+        localNameLength !== nameLength || dataStart + compressed > directoryStart ||
+        !nameBytes.every((byte, i) => bytes[local + 30 + i] === byte) ||
+        (!(flags & 8) && (view.getUint32(local + 18, true) !== compressed || view.getUint32(local + 22, true) !== expanded)) ||
+        (method === 0 && compressed !== expanded)) invalid();
+    // ZIP sizes are attacker-controlled. Measure DEFLATE output in small input
+    // chunks so a forged declaration cannot reach ExcelJS's unbounded inflater.
+    if (method === 8) {
+      let actual = 0;
+      const inflater = new Inflate((chunk) => {
+        actual += chunk.length;
+        if (actual > expanded) throw Error("BOQ expanded size limit exceeded");
+      });
+      for (let offset = 0; offset < compressed; offset += 1024) {
+        const next = Math.min(offset + 1024, compressed);
+        inflater.push(bytes.subarray(dataStart + offset, dataStart + next), next === compressed);
+      }
+      if (!compressed) inflater.push(new Uint8Array(), true);
+      if (actual !== expanded) invalid();
     }
-  if (!entries) throw Error("Invalid ZIP workbook directory");
+    cursor += 46 + nameLength + extra + comment;
+  }
+  if (cursor !== end) invalid();
 }
 export async function parseXlsx(bytes: Uint8Array): Promise<DocumentPage[]> {
   validateXlsx(bytes);
-  // Validate expansion against directory bounds before handing XML to ExcelJS.
-  const entries = unzipSync(bytes);
-  if (Object.values(entries).reduce((n, v) => n + v.length, 0) > 24_000_000)
-    throw Error("BOQ size limit exceeded");
   const Excel = await import("exceljs");
   const workbook = new Excel.Workbook();
   await workbook.xlsx.load(Buffer.from(bytes) as never);

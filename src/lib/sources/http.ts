@@ -20,7 +20,7 @@ const permitted = [
 export function officialUrl(value: string, base?: string) {
   try {
     const u = new URL(value, base);
-    return u.protocol === "https:" &&
+    return u.protocol === "https:" && !u.username && !u.password && (!u.port || u.port === "443") &&
       permitted.some((h) =>
         h.startsWith(".")
           ? u.hostname.endsWith(h)
@@ -43,6 +43,7 @@ export function officialDocumentRedirect(value: string, from: string) {
       source.hostname === "www.gmc.edu.in" &&
       /^\/_files\/ugd\/[^/]+\.pdf$/i.test(source.pathname) &&
       target.protocol === "https:" &&
+      !target.username && !target.password && (!target.port || target.port === "443") &&
       target.hostname === "bf8acbf3-d9c2-4d05-85d6-d9849a6e99ab.filesusr.com" &&
       target.pathname === source.pathname.replace("/_files/", "/")
     )
@@ -177,10 +178,25 @@ export class SourceHttp {
           response.headers.get("location") || "",
           url,
         );
-        if (!next) throw Error("Unrecognised source redirect");
-        url = next;
         await response.body?.cancel();
-        if (response.status === 303) init = { method: "GET" };
+        if (!next) throw Error("Unrecognised source redirect");
+        const changesOrigin = new URL(next).origin !== u.origin;
+        const changesToGet = response.status === 303 ||
+          ([301, 302].includes(response.status) && init.method?.toUpperCase() === "POST");
+        // Do not forward a form token or caller credentials to another host.
+        if (changesOrigin && init.body && !changesToGet)
+          throw Error("Cross-origin source form redirect is unsupported");
+        const redirectHeaders = new Headers(init.headers);
+        if (changesOrigin) {
+          for (const name of ["authorization", "proxy-authorization", "cookie", "referer", "origin", "x-requested-with"])
+            redirectHeaders.delete(name);
+        }
+        if (changesToGet) {
+          redirectHeaders.delete("content-type");
+          redirectHeaders.delete("content-length");
+        }
+        init = { ...init, headers: redirectHeaders, ...(changesToGet ? { method: "GET", body: undefined } : {}) };
+        url = next;
         continue;
       }
       if (!response.ok) {
@@ -239,7 +255,8 @@ export class SourceHttp {
       // downloaded bytes for content-hash verification after extraction.
       const parser = new PDFParse({ data: bytes.slice() });
       try {
-        const result = await parser.getText();
+        const result = await parser.getText({ first: 120 });
+        if (result.total > 120) return;
         return result.text.trim() || undefined;
       } finally {
         await parser.destroy();

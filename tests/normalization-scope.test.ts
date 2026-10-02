@@ -18,6 +18,10 @@ function raw(title: string): RawTender {
   };
 }
 describe("normalization uses procurement title for conservative scope decisions", () => {
+  it("keeps a record with an invalid observation timestamp likely without crashing the dashboard", () => {
+    const record = {...raw("Supply of ICU ventilators"), fetchedAt: "invalid", originalClosingDate: "2026-10-02T15:00:00+05:30"};
+    expect(normalizeTender(record, false, now)?.status).toBe("ACTIVE_LIKELY");
+  });
   it("keeps actual ICU equipment despite body boilerplate, with aligned dashboard metrics", () => {
     const medical = raw("Supply of ICU ventilators");
     const office = raw("Supply of office furniture");

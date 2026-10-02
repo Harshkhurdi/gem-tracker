@@ -1,6 +1,7 @@
 "use client";
 import Specifications from "./Specifications";
 import DocumentLinks from "./DocumentLinks";
+import { descriptionExcerpt, displaySourceText } from "@/lib/tender/display-text";
 import { PRIORITY_EQUIPMENT } from "@/lib/config/priority-equipment";
 
 import { useEffect, useMemo, useState } from "react";
@@ -140,7 +141,7 @@ function TenderRows({
                 )}
                 <details className="record-details">
                   <summary>Details & documents</summary>
-                  {t.description && <p>{t.description}</p>}
+                  {descriptionExcerpt(t.description) && <p>{descriptionExcerpt(t.description)}</p>}
                   <p>
                     Published: {date(t.publishDate)} · Checked:{" "}
                     {date(t.checkedAt, true)} IST
@@ -216,12 +217,12 @@ function TenderRows({
                       ? data?.institutions.find((i) => i.id === t.institutionId)
                           ?.name
                       : null) ||
-                    t.organisation ||
+                    displaySourceText(t.organisation) ||
                     "Statewide / unassigned buyer"}
                 </strong>
                 <div className="record-meta">
                   {t.region}
-                  {t.location ? ` · ${t.location}` : ""}
+                  {displaySourceText(t.location) ? ` · ${displaySourceText(t.location)}` : ""}
                 </div>
                 {t.buyer && <div className="record-meta">{t.buyer}</div>}
               </td>
@@ -231,7 +232,8 @@ function TenderRows({
                     ? date(t.effectiveClosingDate)
                     : "Not published"}
                 </strong>
-                {t.datePrecision === "minute" && t.effectiveClosingDate && (
+                {t.datePrecision === "minute" && t.effectiveClosingDate &&
+                  !/^\d{4}-\d{2}-\d{2}$/.test(t.effectiveClosingDate) && (
                   <div className="record-meta">
                     {date(t.effectiveClosingDate, true)} IST
                   </div>

@@ -26,11 +26,13 @@ export function normalizeTender(
     raw,
   );
   if (!classification.isMedical) return;
+  const fetched = Date.parse(raw.fetchedAt);
   const state = resolveStatus(
     {
       ...raw,
       verification:
-        recordStale || istDay(new Date(raw.fetchedAt)) !== istDay(now)
+        recordStale || !Number.isFinite(fetched) ||
+        istDay(new Date(fetched)) !== istDay(now)
           ? "listing"
           : raw.verification,
     },

@@ -43,7 +43,8 @@ export function resolveStatus(
     fetched - now.getTime() <= 5 * 60 * 1000;
   return {
     status:
-      raw.verification === "detail" && fresh
+      raw.verification === "detail" && fresh && raw.datePrecision !== "day" &&
+      !/^\d{4}-\d{2}-\d{2}$/.test(effectiveClosingDate)
         ? "ACTIVE_VERIFIED"
         : "ACTIVE_LIKELY",
     effectiveClosingDate,

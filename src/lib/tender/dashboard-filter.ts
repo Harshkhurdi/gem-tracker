@@ -33,6 +33,8 @@ export function refreshElapsedStatuses(
     const fresh =
       Number.isFinite(fetched) &&
       !t.stale &&
+      t.datePrecision !== "day" &&
+      !/^\d{4}-\d{2}-\d{2}$/.test(t.effectiveClosingDate || "") &&
       now - fetched <= 86400000 &&
       fetched - now <= 300000 &&
       istDay(new Date(fetched)) === istDay(new Date(now));

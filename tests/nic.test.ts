@@ -185,3 +185,14 @@ describe("NIC corrigendum identity", () => {
     ).toThrow("missing");
   });
 });
+
+describe("NIC link provenance", () => {
+  it("rejects unsafe and cross-portal tender links rather than publishing them", () => {
+    for (const href of ["javascript:alert(1)", "https://evil.example/tender", "https://eprocure.gov.in/tender", "https://user:pass@hptenders.gov.in/tender"])
+      expect(() => parseNicList(list.replace(/href='[^']+'/g, `href='${href}'`), config.origin, config, "now")).toThrow("portal link");
+  });
+  it("rejects cross-portal corrigendum links so detail verification cannot hide missing amendments", () => {
+    const raw = parseNicList(list, config.origin, config, "now")[0];
+    expect(() => enrichNicDetail(raw, detail.replace("href='/nicgep/app?component=%24DirectLink_10", "href='https://eprocure.gov.in/nicgep/app?component=%24DirectLink_10"), raw.sourceUrl)).toThrow("portal link");
+  });
+});

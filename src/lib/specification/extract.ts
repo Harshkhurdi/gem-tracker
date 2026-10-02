@@ -7,6 +7,13 @@ import type {
 } from "../../types/specification";
 
 type Rule = [SpecificationSection, string, RegExp];
+const amendmentWording = /read as|replac\w*|amend\w*|revis\w*|instead of|changed to/i;
+// Display groups can contain independent clauses; match the explicit subject.
+function clauseSubject(text: string): string {
+  return text.toLowerCase()
+    .split(/\b(?:shall|must|should|amend\w*|revis\w*|replac\w*|read as|instead of|changed to|is|are)\b|[:=]|\d/)[0]
+    .replace(/[^a-z]+/g, " ").trim();
+}
 const rules: Rule[] = [
   [
     "technicalRequirements",
@@ -184,6 +191,16 @@ export const emptySections = (): TenderSpecification["sections"] => ({
   commercialTerms: [],
   quantity: [],
 });
+function documentLines(text: string): string[] {
+  return text.replace(/\r/g, "").split("\n")
+    .map((line) => line.replace(/\s+/g, " ").trim()).filter(Boolean);
+}
+function clauseText(lines: string[], index: number): string {
+  const line = lines[index];
+  const next = lines[index + 1];
+  return line.length < 100 && /[:/]$/.test(line) && next &&
+    !rules.some(([, , pattern]) => pattern.test(next)) ? `${line} ${next}` : line;
+}
 export function extractSpecifications(
   documents: ParsedDocument[],
   equipmentTypes: PriorityEquipment[],
@@ -205,6 +222,36 @@ export function extractSpecifications(
     notes: [],
     supersededRequirements: [],
   };
+  // Processing order is not precedence for same-date or undated amendments.
+  const ambiguousAmendments = new Set<string>();
+  const amendments = new Map<string, Map<ParsedDocument, { date: number; requirements: Set<string> }>>();
+  for (const doc of documents) {
+    if (doc.type !== "corrigendum" || doc.status !== "parsed") continue;
+    for (const page of doc.pages) {
+      const lines = documentLines(page.text);
+      for (let index = 0; index < lines.length; index++) {
+        const text = clauseText(lines, index);
+        if (!amendmentWording.test(text)) continue;
+        for (const [section, field, pattern] of rules) {
+          if (!pattern.test(text)) continue;
+          const resolvedField = section === "accessories" ? pattern.exec(text)?.[0] || field : field;
+          const key = `${section}:${resolvedField.toLowerCase()}:${clauseSubject(text)}`;
+          const peers = amendments.get(key) || new Map<ParsedDocument, { date: number; requirements: Set<string> }>();
+          const peer = peers.get(doc) || { date: Date.parse(doc.publishedDate || ""), requirements: new Set<string>() };
+          peer.requirements.add(text);
+          peers.set(doc, peer);
+          amendments.set(key, peers);
+        }
+      }
+    }
+  }
+  for (const [key, peers] of amendments) {
+    const records = [...peers.values()];
+    const dates = records.map((record) => record.date);
+    if (records.some((record) => record.requirements.size > 1) ||
+      (dates.length > 1 && (dates.some((date) => !Number.isFinite(date)) || new Set(dates).size !== dates.length)))
+      ambiguousAmendments.add(key);
+  }
   // Date ordering is required before an amendment can override a current value.
   const ordered = [...documents].sort(
     (a, b) =>
@@ -215,11 +262,7 @@ export function extractSpecifications(
     if (doc.status !== "parsed") continue;
     let inDiscovery = false;
     for (const page of doc.pages) {
-      const lines = page.text
-        .replace(/\r/g, "")
-        .split("\n")
-        .map((s) => s.replace(/\s+/g, " ").trim())
-        .filter(Boolean);
+      const lines = documentLines(page.text);
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
         if (
@@ -252,14 +295,7 @@ export function extractSpecifications(
         )
           continue;
         // Preserve adjacent wrapped values but never pull an unrelated section heading.
-        const next = lines[i + 1];
-        const text =
-          line.length < 100 &&
-          /[:/]$/.test(line) &&
-          next &&
-          !rules.some(([, , p]) => p.test(next))
-            ? `${line} ${next}`
-            : line;
+        const text = clauseText(lines, i);
         for (const [section, field, pattern] of rules) {
           if (!pattern.test(text)) continue;
           // Post-warranty maintenance and uptime guarantees are CMC terms,
@@ -305,32 +341,30 @@ export function extractSpecifications(
             )?.[1];
           if (
             doc.type === "corrigendum" &&
-            /read as|replac\w*|amend\w*|revis\w*|instead of|changed to/i.test(
-              text,
-            )
+            amendmentWording.test(text)
           ) {
             item.value = text.match(
               /(?:read as|changed to|replaced (?:by|with))\s*[:–-]?\s*(.+)$/i,
             )?.[1];
-            const previous = result.sections[section].filter(
-              (x) => x.field === item.field,
-            );
-            // Multiple undated amendments have no defensible precedence.
-            if (previous.length > 1) {
+            const subject = clauseSubject(text);
+            const sameField = result.sections[section].filter((x) => x.field === item.field);
+            const previous = sameField.filter((x) => subject && clauseSubject(x.requirement) === subject);
+            const key = `${section}:${item.field.toLowerCase()}:${subject}`;
+            if (ambiguousAmendments.has(key) || previous.length > 1 || (sameField.length && !previous.length)) {
               result.notes.push(
-                "An amendment overlaps multiple clauses under the same field; clause precedence requires official review.",
+                "An amendment has an ambiguous clause target or chronology; precedence requires official review.",
               );
-            } else if (
-              doc.publishedDate ||
+            } else if (previous.length && (
+              Number.isFinite(Date.parse(doc.publishedDate || "")) ||
               documents.filter((d) => d.type === "corrigendum").length === 1
-            ) {
+            )) {
               result.supersededRequirements.push(
                 ...previous.map((x) => ({ ...x, supersededBy: doc.url })),
               );
               result.sections[section] = result.sections[section].filter(
-                (x) => x.field !== item.field,
+                (x) => !previous.includes(x),
               );
-            } else
+            } else if (previous.length)
               result.notes.push(
                 "Undated amendments contain overlapping requirements; precedence requires official review.",
               );

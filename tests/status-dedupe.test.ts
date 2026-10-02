@@ -36,7 +36,7 @@ describe("evidence based status", () => {
         now,
       ).status,
     ).toBe("ACTIVE_LIKELY");
-    expect(resolveStatus(raw({ verification: "detail" }), now).status).toBe(
+    expect(resolveStatus(raw({ verification: "detail", originalClosingDate: "2026-10-01T15:00:00+05:30" }), now).status).toBe(
       "ACTIVE_VERIFIED",
     );
     expect(
@@ -45,6 +45,13 @@ describe("evidence based status", () => {
         now,
       ).status,
     ).toBe("ACTIVE_LIKELY");
+  });
+  it("keeps day-only official detail deadlines likely instead of verifying an inferred closing time", () => {
+    expect(resolveStatus(raw({ verification: "detail" }), now).status).toBe("ACTIVE_LIKELY");
+    expect(resolveStatus(raw({
+      verification: "detail", datePrecision: "day",
+      originalClosingDate: "2026-10-01T23:59:59+05:30",
+    }), now).status).toBe("ACTIVE_LIKELY");
   });
   it("preserves missing deadline as unknown", () =>
     expect(

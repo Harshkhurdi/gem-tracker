@@ -16,7 +16,7 @@ import type {
 import { parseIndianDate, dayOnly } from "@/lib/tender/dates";
 import { matchInstitutions } from "@/lib/tender/institution-matcher";
 import { classifyMedical } from "@/lib/tender/classifier";
-import { SourceHttp, sanitizeError } from "../http";
+import { SourceHttp, sanitizeError, officialUrl } from "../http";
 export interface NicConfig {
   id: string;
   name: string;
@@ -29,7 +29,12 @@ export interface NicConfig {
 }
 const clean = (html: string) => html.replace(/<!--[\s\S]*?-->/g, "");
 const normalized = (s: string) => s.replace(/\s+/g, " ").trim();
-const absolute = (url: string, base: string) => new URL(url, base).href;
+const absolute = (url: string, base: string) => {
+  const resolved = officialUrl(url, base);
+  if (!resolved || new URL(resolved).origin !== new URL(base).origin)
+    throw Error("Unrecognised procurement portal link");
+  return resolved;
+};
 const publicUrl = (url: string) => {
   const u = new URL(url);
   u.searchParams.delete("session");
