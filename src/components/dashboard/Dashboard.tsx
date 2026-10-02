@@ -1,5 +1,6 @@
 "use client";
 import Specifications from "./Specifications";
+import DocumentLinks from "./DocumentLinks";
 import { PRIORITY_EQUIPMENT } from "@/lib/config/priority-equipment";
 
 import { useEffect, useMemo, useState } from "react";
@@ -561,6 +562,7 @@ export default function Dashboard() {
         <nav className="tabs" aria-label="Dashboard views">
           {[
             ["opportunities", "Opportunities", tenders.length],
+            ["documents", "Document links", tenders.length],
             ["institutions", "Institutions", data?.institutions.length ?? 0],
             ["sources", "Sources & diagnostics", data?.sources.length ?? 0],
           ].map(([id, name, count]) => (
@@ -860,6 +862,9 @@ export default function Dashboard() {
               )}
             </details>
           </>
+        )}
+        {tab === "documents" && (
+          <DocumentLinks tenders={tenders} data={data} clock={clock} />
         )}
         {tab === "institutions" && (
           <section>
