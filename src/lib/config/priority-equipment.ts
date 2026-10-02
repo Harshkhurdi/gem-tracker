@@ -148,6 +148,10 @@ export function priorityCategories(
   const endoscopyMedical = classifyMedical(endoscopyScope, endoscopyScope, raw);
   if (!medical.isMedical || /\bsimulat(?:or|ion)\b/i.test(scope)) return [];
   return PRIORITY_EQUIPMENT.filter((p) => {
+    // A lighting UPS/battery is an accessory purchase, not an OT-light system.
+    // Actual lights supplied with battery/UPS backup remain eligible.
+    if (p.id === "OT_LIGHTS" &&
+      /\bot lights?\s+(?:ups\s+)?batter(?:y|ies)\b|\b(?:ups|batter(?:y|ies)|backup)\b[^\n.;]*\b(?:for|of)\s+(?:the\s+)?ot lights?\b/i.test(raw.title)) return false;
     if (p.id === "ULTRASOUND" &&
       /\b(?:ultrasound gel|ultrasound ups batteries|(?:fetal|foetal) doppler)\b/i.test(scope)) return false;
     const imagingGroup = ["ULTRASOUND", "MAMMOGRAPHY", "DIGITAL_RADIOGRAPHY", "C_ARM"].includes(p.id);

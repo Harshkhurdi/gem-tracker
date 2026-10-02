@@ -44,6 +44,17 @@ const equipment = [
 ] as const;
 
 describe("complete equipment priority coverage", () => {
+  it.each([
+    "Quotation for purchase of OT Light UPS Battery",
+    "Quotations for Purchase OT Light UPS Battery",
+    "Quotation for Purchase of UPS backup for OT Light and Other Equipment",
+  ])("retains accessory-only %s outside the OT-light system priority", title => {
+    expect(priorityCategories(raw(title))).not.toContain("OT_LIGHTS");
+    expect(discoveryCategories(title)).not.toContain("OT_LIGHTS");
+  });
+  it.each(["Supply of OT Lights with UPS and battery backup", "Quotation for Purchase of Dome OT Light"])("retains actual lighting procurement %s", title => {
+    expect(priorityCategories(raw(title))).toContain("OT_LIGHTS");
+  });
   it.each(equipment)("discovers and assigns %s", (title, group) => {
     expect(priorityCategories(raw(title))).toContain(group);
     expect(discoveryCategories(title)).toContain(group);

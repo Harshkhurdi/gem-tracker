@@ -19,7 +19,7 @@ All 25 configured source adapters were attempted: 12 successful listing reads, 1
 | Syringe / Infusion pumps | 25 | 14 | 0 | 0 | 0 | 2 | 1 | 7 | 2 | 1 | 0 |
 | Patient monitors | 25 | 2 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | Patient / Fluid warmers | 25 | 1 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 0 |
-| OT lights | 25 | 5 | 0 | 0 | 0 | 1 | 4 | 5 | 0 | 3 | 0 |
+| OT lights | 25 | 5 | 0 | 3 | 0 | 1 | 1 | 3 | 0 | 1 | 0 |
 | Anaesthesia machines | 25 | 2 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 
 Raw candidates are alias signals in retained adapter records before normalized deduplication, including historical notices. Adapters may reject earlier portal results before this audit can count them. Nonmedical rejections and unsupported medical-category hints are separate; deduplication is not a false positive. Unknown counts include all retained unknown dates. Document/specification counts cover active and potentially current unknown records, not old archives. Complete describes the inspected document set, never compliance or exhaustive verification.
@@ -54,7 +54,7 @@ Every currently active priority record in this snapshot was reviewed against its
 | [GEM/2026/B/8091912](https://bidplus.gem.gov.in/showbidDocument/9956459) | Ultrasound Machine (V2) | ULTRASOUND | 2026-10-13T15:00:00+05:30 | partial |
 | [GEM/2026/B/8037864](https://bidplus.gem.gov.in/showbidDocument/9894537) | Syringe Infusion Pump | INFUSION_PUMPS | 2026-10-14T14:00:00+05:30 | complete |
 
-Two incidental matches were corrected during this review: GEM/2026/B/7875662 is an operating table with C-arm/X-ray compatibility, not a C-arm procurement; GEM/2026/B/8034327 is an electrocautery device whose technical section mentions laparoscopic cases, not supplied endoscopy equipment. Both remain in the wider medical tracker. Actual C-arm bundles and laparoscopic instruments remain positive.
+Two incidental matches were corrected during this review: GEM/2026/B/7875662 is an operating table with C-arm/X-ray compatibility, not a C-arm procurement; GEM/2026/B/8034327 is an electrocautery device whose technical section mentions laparoscopic cases, not supplied endoscopy equipment. Both remain in the wider medical tracker. Three OT-light UPS/battery-only notices also remain in the wider tracker without being counted as OT-light systems. Actual C-arm bundles and laparoscopic instruments remain positive.
 
 ## Limits and implementation checks
 
@@ -63,8 +63,8 @@ Two incidental matches were corrected during this review: GEM/2026/B/7875662 is 
 - Official labelled extensions can make an expired original eligible for inspection; cancellation/withdrawal amendments prevent active inspection. GeM index extensions continue to take precedence over original PDFs.
 - A failed GeM state organisation lookup no longer prevents its official health-ministry fallback. Regional/organisation/state limits and institution/bid identity checks remain unchanged.
 - New extraction fields cover imaging, infusion accuracy/occlusion, warming, surgical illumination, anaesthesia delivery and airway visualization. Every value is an excerpt with official page/row provenance.
-- 649 tests across 26 files passed. Type checking, lint and the production build also passed.
-- No current monitor or anaesthesia-machine opportunity was found in this snapshot. A fluid-warmer record has an unknown deadline. Zero results do not establish that no unmirrored/protected tender exists.
+- 654 tests across 26 files passed. Type checking, lint and the production build also passed.
+- No current monitor or anaesthesia-machine opportunity was found in this snapshot. A patient-warming system record has an unknown deadline. Zero results do not establish that no unmirrored/protected tender exists.
 - Some GeM organisation searches fail; SLBSGMCH institutional notices were unavailable. Portal protection, generic unseen BOQs and changing pagination can leave gaps. No CAPTCHA bypass or invented tender/date was used.
 - Retender notes require explicit retender wording plus matching cancelled history. They do not infer a replacement or silently suppress an older tender without official terminal evidence.
 
