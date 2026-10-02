@@ -1,4 +1,5 @@
 import { processPrioritySource, linkRetenders } from "../specification/enrich";
+import { createGemAdapter } from "./adapters/gem";
 import { createNicAdapter } from "./adapters/nic";
 import { createBilaspurAdapter } from "./adapters/bilaspur";
 import { createInstitutionAdapter } from "./adapters/institution";
@@ -139,36 +140,7 @@ const baseAdapters: TenderSourceAdapter[] = [
   createInstitutionAdapter("slbsgmc"),
   esicAdapter,
   cpppEsicAdapter,
-  {
-    id: "gem-direct",
-    name: "GeM direct public search",
-    url: "https://bidplus.gem.gov.in/all-bids",
-    institutionIds: [],
-    regions: ["Punjab", "Chandigarh", "Himachal Pradesh"],
-    async fetch() {
-      return {
-        sourceId: this.id,
-        sourceName: this.name,
-        status: "UNAVAILABLE",
-        records: [],
-        attemptedAt: new Date().toISOString(),
-        error:
-          "Direct automated GeM search is not a verified reliable public interface. Official institution GeM mirrors are fetched separately.",
-        notes: [
-          "No authentication or CAPTCHA automation. No guessed GeM API endpoints.",
-        ],
-        metrics: {
-          rawRecords: 0,
-          institutionMatches: 0,
-          medicalMatches: 0,
-          falsePositivesRejected: 0,
-          unassignedRejected: 0,
-          detailChecks: 0,
-        },
-        durationMs: 0,
-      };
-    },
-  },
+  ...(["Chandigarh", "Punjab", "Himachal Pradesh"] as const).map(createGemAdapter),
 ];
 export const adapters: TenderSourceAdapter[] = baseAdapters.map((adapter) => ({
   ...adapter,

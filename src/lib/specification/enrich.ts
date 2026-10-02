@@ -214,7 +214,7 @@ export async function inspectPriorityTender(
   raw.specification = extractSpecifications(documents, categories);
   // Apply only labelled submission fields, with amendment precedence and identity guard.
   const deadline = latestAmendmentDeadline(documents);
-  if (deadline) {
+  if (deadline && !raw.sourceId.startsWith("gem-direct")) {
     if (!raw.publishDate || Date.parse(deadline.date) >= Date.parse(raw.publishDate)) {
       raw.extendedClosingDate = deadline.date;
       raw.datePrecision = deadline.datePrecision;
@@ -244,7 +244,7 @@ export async function inspectPriorityTender(
       ];
     }
   }
-  if (!raw.originalClosingDate && !raw.extendedClosingDate) {
+  if (!raw.originalClosingDate && !raw.extendedClosingDate && !raw.sourceId.startsWith("gem-direct")) {
     const deadlines = documents
       .filter((d) => d.status === "parsed" && d.type !== "corrigendum")
       .map((d) =>

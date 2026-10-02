@@ -150,7 +150,7 @@ export function parseInstitution(
       tenderId: gem || (key === "aiims-bathinda" ? id : undefined),
       referenceNumber: key === "aiims-bathinda-open" ? id : undefined,
       corrigenda: docs
-        .filter((d) => /corrig|amend|extension/i.test(d.label))
+        .filter((d) => /corrig|amend|addendum|extension/i.test(d.label))
         .map((d) => ({ title: d.label, url: d.url, type: "corrigendum" })),
       cancelled:
         docs.some((d) => /cancellation|cancelled/i.test(d.label)) || undefined,
@@ -286,7 +286,8 @@ export function createInstitutionAdapter(
               (classifyMedical(r.title).isMedical ||
                 genericPriorityCandidate(r)) &&
               (!r.originalClosingDate ||
-                Date.parse(r.originalClosingDate) >= now),
+                Date.parse(r.originalClosingDate) >= now ||
+                !!r.corrigenda?.length),
           )
           .sort(
             (a, b) =>
@@ -309,8 +310,11 @@ export function createInstitutionAdapter(
                         r.id?.replace(/^bfuhs-/, "") || "",
                         r.publishDate,
                       )
-                    : r.documents?.find((d) => /\.pdf(?:$|\?)/i.test(d.url))
-                        ?.url;
+                    : (r.corrigenda?.find((d) =>
+                        d.url && /\.pdf(?:$|\?)/i.test(d.url),
+                      )?.url ||
+                        r.documents?.find((d) => /\.pdf(?:$|\?)/i.test(d.url))
+                          ?.url);
                 if (!url) continue;
                 const bytes = await http.bytes(url, 8_000_000);
                 if (
@@ -365,9 +369,9 @@ export function createInstitutionAdapter(
         return {
           records,
           notes: [
-            `Official institutional mirror; ${inspected} of ${candidates.length} bounded relevant PDFs inspected (${failures} unavailable). Separate portal amendments may change the published deadline.`,
+            `Official institutional mirror; ${inspected} of ${candidates.length} bounded relevant PDFs inspected (${failures} unavailable). Attached amendments are prioritised for document inspection; separate portal amendments and documents outside this bounded check remain unchecked.`,
           ],
-          partial: key !== "aiims-bathinda" || failures > 0,
+          partial: true,
         };
       }),
   };

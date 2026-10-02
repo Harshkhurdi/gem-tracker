@@ -17,6 +17,7 @@ export function normalizeTender(
   stale = false,
   now = new Date(),
 ): Tender | undefined {
+  const recordStale = stale || !!raw.stale;
   const matched = assignInstitutions(raw);
   if (!matched.length && raw.procurementScope !== "statewide") return;
   const classification = classifyMedical(
@@ -29,7 +30,7 @@ export function normalizeTender(
     {
       ...raw,
       verification:
-        stale || istDay(new Date(raw.fetchedAt)) !== istDay(now)
+        recordStale || istDay(new Date(raw.fetchedAt)) !== istDay(now)
           ? "listing"
           : raw.verification,
     },
@@ -75,7 +76,7 @@ export function normalizeTender(
     matchedKeywords: classification.matchedKeywords,
     confidence: classification.confidence,
     checkedAt: raw.fetchedAt,
-    stale,
+    stale: recordStale,
     sourceReferences: raw.sourceReferences?.length
       ? raw.sourceReferences
       : [
@@ -141,7 +142,7 @@ export function buildDashboard(
       },
     };
   });
-  const unique = deduplicate(tenders);
+  const unique = deduplicate(tenders, now);
   const list = unique.tenders;
   const count = (status: string) =>
     list.filter((t) => t.status === status).length;

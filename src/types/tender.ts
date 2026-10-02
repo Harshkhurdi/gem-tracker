@@ -133,6 +133,8 @@ export interface RawTender extends ProcurementCategories {
   documentProductScope?: string;
   specification?: TenderSpecification;
   fetchedAt: string;
+  /** Retained individual record omitted from an incomplete source refresh. */
+  stale?: boolean;
 }
 export interface Tender extends RawTender {
   id: string;

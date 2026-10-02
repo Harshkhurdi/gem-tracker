@@ -8,13 +8,14 @@ export const institutions: Institution[] = [
     city: "Chandigarh",
     aliases: [
       "PGIMER",
+      "Post Graduate Institute Of Medical Education And Research Chandigarh",
       "PGI Chandigarh",
       "Postgraduate Institute of Medical Education and Research",
       "Postgraduate Institute of Medical and Education and Research",
     ],
     institutionType: "central-government",
     operationalStatus: "operational",
-    sourceIds: ["cppp-pgimer"],
+    sourceIds: ["cppp-pgimer", "gem-direct", "gem-direct-punjab"],
     officialUrl: "https://pgimer.edu.in",
   },
   {
@@ -84,7 +85,7 @@ export const institutions: Institution[] = [
     ],
     institutionType: "central-government",
     operationalStatus: "operational",
-    sourceIds: ["cppp-pgimer"],
+    sourceIds: ["cppp-pgimer", "gem-direct", "gem-direct-punjab"],
     officialUrl: "https://pgimer.edu.in",
   },
   {
@@ -341,6 +342,8 @@ export const institutions: Institution[] = [
     aliases: [
       "SLBSGMC",
       "SLBSGMCH",
+      "SLBS Govt. Medical College and Hospital",
+      "SLBS Government Medical College and Hospital",
       "SLBSGMC Nerchowk",
       "SLBSGMCH Nerchowk",
       "Shri Lal Bahadur Shastri Government Medical College",
@@ -439,3 +442,10 @@ institutions.push({
     "https://punjab.gov.in/department-of-medical-education-and-research/",
   note: "Listed by Punjab DMER; operational MBBS status is not established. Kept separate from the Sangrur district PPP project.",
 });
+
+// Direct GeM regional searches supplement each monitored institution's mirrors.
+for (const institution of institutions) {
+  const source = institution.region === "Chandigarh" ? "gem-direct"
+    : institution.region === "Punjab" ? "gem-direct-punjab" : "gem-direct-himachal";
+  if (!institution.sourceIds.includes(source)) institution.sourceIds.push(source);
+}

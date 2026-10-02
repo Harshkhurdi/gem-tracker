@@ -59,7 +59,7 @@ The registry is data-driven in `src/lib/sources/registry.ts`:
 - GMC Patiala and GMC Amritsar institution tables.
 - SLBSGMCH institutional tender page.
 - ESIC public office notices, filtered for Ludhiana; bounded page scanning is partial coverage.
-- Direct GeM coverage is explicitly **UNAVAILABLE** until a reliable verified public machine interface is available. This does not disable official AIIMS GeM mirrors.
+- Direct GeM public search covers Punjab, Chandigarh and Himachal Pradesh through the verified `advance-search` form and its public search responses. It traverses reported regional result pages, recovers repeated-page gaps with closing-date groups and supplements state-government buyer searches. Requests share a four-request pool and have strict per-region count/time limits; remaining omissions and inaccessible documents are reported as PARTIAL. Current GeM index deadlines take precedence over original PDFs. No login or CAPTCHA automation is used.
 
 NIC portals are read through ordinary public organisation links with a short-lived cookie jar. Relevant detail and corrigendum checks are bounded; limits and failures are reported as PARTIAL. CAPTCHA-protected downloads link to the official tender page; the application does not bypass CAPTCHA, automate login or invent GeM endpoints.
 
@@ -118,7 +118,7 @@ There is no cron requirement and no reminder automation. `GET /api/tenders` expo
 
 ## Priority equipment and specification extraction
 
-The five priority filters cover ventilators, ultrasound systems, defibrillators, clinical beds/stretchers/pressure care, and endoscopy. Their counts use real active records and recalculate status as time passes. Ultrasound gel, fetal Doppler and teaching simulators remain in the wider medical tracker without inflating primary equipment counts.
+The five priority filters appear in both Opportunities (active counts) and Unknown deadlines (unknown counts), with independent selections. They cover ventilators, ultrasound systems, defibrillators, clinical beds/stretchers/pressure care, and endoscopy. Their counts use the status for the selected section and recalculate as time passes. Ultrasound gel, fetal Doppler and teaching simulators remain in the wider medical tracker without inflating primary equipment counts.
 
 Discovery scans expanded aliases across the official registry, including the full Bathinda tender/quotation list, direct CPPP Bathinda and Bilaspur organisation lists, and Himachal Health & Family Welfare procurement. Generic clinical packages enter document inspection without being accepted as specific equipment; declared official BOQ/specification items must establish the product. Existing civil/department exclusions still apply.
 
@@ -131,3 +131,5 @@ The structured sections include technical requirements, accessories/consumables,
 `audit:data` exports real source snapshots for reproducible category audits. Source success describes listing access; technical-document availability and extraction status are separate. Zero active results do not establish that no unmirrored tender exists.
 
 Already downloaded official PDF bytes can be shared with priority extraction for at most 60 seconds in a bounded 32 MB/12-document memory cache. This avoids a second download immediately after normal metadata inspection. Buffers are copied before PDF worker transfer; expired entries require a new official request.
+
+Partial GeM refreshes retain missing previously seen bids for up to 24 hours with their original check times and a stale marker. They are never presented as newly verified. A complete fetch replaces the prior snapshot, and terminal cancellation notices still take precedence. Portal outages, protected documents and inconsistent pagination mean zero-gap coverage cannot be guaranteed.

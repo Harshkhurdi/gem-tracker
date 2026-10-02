@@ -2,7 +2,7 @@ import { unstable_cache, revalidateTag } from "next/cache";
 import { getAdapter, adapters } from "@/lib/sources/registry";
 import { readDurable, writeDurable } from "./redis";
 import { sanitizeError } from "@/lib/sources/http";
-import type { SourceFetchResult } from "@/types/tender";
+import type { RawTender, SourceFetchResult } from "@/types/tender";
 const ttl = 900;
 // Data Cache persists snapshots; these bounded maps coalesce work and retain a
 // prior snapshot during revalidation.
@@ -50,6 +50,43 @@ function retain(
       }
     : failure;
 }
+/** A partial regional search cannot prove that an omitted bid disappeared. */
+function retainPartialGem(
+  current: SourceFetchResult,
+  previous?: SourceFetchResult,
+): SourceFetchResult {
+  if (current.status !== "PARTIAL" || !/^gem-direct(?:-|$)/.test(current.sourceId) ||
+    previous?.sourceId !== current.sourceId) return current;
+  const key = (record: RawTender) => record.tenderId?.trim().toUpperCase() ||
+    record.id || record.tenderUrl;
+  const currentKeys = new Set(current.records.map(key).filter(Boolean));
+  const retained: RawTender[] = [];
+  const now = Date.now();
+  for (const record of previous.records) {
+    const identity = key(record), checked = Date.parse(record.fetchedAt);
+    // Bound each original observation, not the newer snapshot timestamp. A
+    // repeated partial fetch must not renew the life of a retained record.
+    if (!identity || currentKeys.has(identity) || !Number.isFinite(checked) ||
+      now - checked > 24 * 60 * 60 * 1000 || checked - now > 5 * 60 * 1000) continue;
+    retained.push({
+      ...record,
+      stale: true,
+      notes: [...new Set([...(record.notes || []),
+        "Not seen in the current partial GeM fetch; prior observation retained for up to 24 hours with its original check time. Current availability requires verification.",
+      ])],
+    });
+    currentKeys.add(identity);
+  }
+  if (!retained.length) return current;
+  return {
+    ...current,
+    records: [...current.records, ...retained],
+    metrics: {...current.metrics, rawRecords: current.records.length + retained.length},
+    notes: [...current.notes,
+      `${retained.length} prior GeM records omitted from this partial fetch are retained as stale; their original observation times have not advanced.`,
+    ],
+  };
+}
 async function perform(id: string): Promise<SourceFetchResult> {
   const active = inflight.get(id);
   if (active) return active;
@@ -67,7 +104,12 @@ async function perform(id: string): Promise<SourceFetchResult> {
         result,
         previousSnapshots.get(id) || (await readDurable(id)),
       );
-    else remember(result);
+    else {
+      if (result.status === "PARTIAL" && /^gem-direct(?:-|$)/.test(id))
+        result = retainPartialGem(result,
+          previousSnapshots.get(id) || (await readDurable(id)));
+      remember(result);
+    }
     await writeDurable(result);
     return result;
   })().finally(() => inflight.delete(id));
@@ -78,7 +120,7 @@ function reader(id: string) {
   let fn = readers.get(id);
   if (!fn) {
     // Category-aware classification needs snapshots containing official NIC metadata.
-    fn = unstable_cache(async () => perform(id), ["medical-source-v7", id], {
+    fn = unstable_cache(async () => perform(id), ["medical-source-v8", id], {
       revalidate: ttl,
       tags: ["tender-source-" + id],
     });

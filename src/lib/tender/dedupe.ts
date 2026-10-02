@@ -63,7 +63,16 @@ const quality = (t: Tender) =>
   (t.documents?.length ?? 0) +
   (t.corrigenda?.length ?? 0) +
   (t.description ? 1 : 0);
-export function deduplicate(tenders: Tender[]): {
+const isDirectGem = (t: Tender) =>
+  /^gem-direct(?:-|$)/.test(t.sourceId) && /^GEM\/20\d{2}\/[BR]\/\d+$/i.test(t.tenderId || "");
+function freshDirectDeadline(t: Tender, now: number): boolean {
+  const checked = Date.parse(t.checkedAt || t.fetchedAt);
+  return isDirectGem(t) && !t.stale &&
+    Number.isFinite(Date.parse(t.extendedClosingDate || "")) &&
+    Number.isFinite(checked) && now - checked <= 24 * 60 * 60 * 1000 &&
+    checked - now <= 5 * 60 * 1000;
+}
+export function deduplicate(tenders: Tender[], now = new Date()): {
   tenders: Tender[];
   duplicatesRemoved: number;
 } {
@@ -80,10 +89,22 @@ export function deduplicate(tenders: Tender[]): {
       tb = Date.parse(existing.checkedAt || existing.fetchedAt);
     const terminal = (t: Tender) =>
       t.status === "CANCELLED" || t.status === "WITHDRAWN";
+    // Fetching a hospital mirror later does not make its original PDF deadline
+    // newer than the portal's current index. Cached unavailable sources cannot
+    // claim this authority, and cancellation/withdrawal still take precedence.
+    const incomingDirect = freshDirectDeadline(tender, now.getTime()),
+      existingDirect = freshDirectDeadline(existing, now.getTime());
+    const directStalenessDiffers =
+      (isDirectGem(tender) || isDirectGem(existing)) &&
+      !!tender.stale !== !!existing.stale;
     const incomingWins =
       terminal(tender) !== terminal(existing)
         ? terminal(tender)
-        : ta > tb || (ta === tb && quality(tender) > quality(existing));
+        : directStalenessDiffers
+          ? !tender.stale
+          : incomingDirect !== existingDirect
+            ? incomingDirect
+            : ta > tb || (ta === tb && quality(tender) > quality(existing));
     const best = incomingWins ? tender : existing,
       other = incomingWins ? existing : tender;
     const references = [

@@ -289,6 +289,7 @@ function UnknownDeadlines({
   const [region, setRegion] = useState("");
   const [institution, setInstitution] = useState("");
   const [category, setCategory] = useState("");
+  const [priorityEquipment, setPriorityEquipment] = useState("");
   const unknown = useMemo(
     () => tenders.filter((t) => t.status === "DEADLINE_UNKNOWN"),
     [tenders],
@@ -299,20 +300,51 @@ function UnknownDeadlines({
   );
   const rows = useMemo(
     () => filterAndSortTenders(unknown, {
-      query, region, institution, category,
+      query, region, institution, category, priorityEquipment,
       status: "DEADLINE_UNKNOWN", scope: "", brand: "", explicit: false,
       source: "", closing: "", sort: "newest", prioritize: false,
     }, clock),
-    [unknown, query, region, institution, category, clock],
+    [unknown, query, region, institution, category, priorityEquipment, clock],
   );
   function reset() {
     setQuery("");
     setRegion("");
     setInstitution("");
     setCategory("");
+    setPriorityEquipment("");
   }
   return (
     <section aria-label="Unknown deadline tenders">
+      <section
+        className="priority-equipment-panel"
+        aria-label="Priority equipment with unknown deadlines"
+      >
+        <div className="filter-heading">
+          <h2>Priority equipment</h2>
+          <span>Unknown deadlines</span>
+        </div>
+        <div className="priority-equipment-grid">
+          {PRIORITY_EQUIPMENT.map((p) => (
+            <button
+              key={p.id}
+              className={priorityEquipment === p.id ? "selected" : ""}
+              aria-pressed={priorityEquipment === p.id}
+              onClick={() => {
+                reset();
+                setPriorityEquipment(p.id);
+              }}
+            >
+              <span>{p.label}</span>
+              <strong>
+                {unknown.filter((t) => t.priorityCategories?.includes(p.id)).length}
+              </strong>
+            </button>
+          ))}
+        </div>
+        <p className="muted">
+          Counts cover tenders with unknown deadlines across the monitored sources.
+        </p>
+      </section>
       <div className="filter-panel">
         <div className="filter-heading">
           <h2>Unknown deadlines</h2>
@@ -324,6 +356,18 @@ function UnknownDeadlines({
           <input type="search" value={query} onChange={(e) => setQuery(e.target.value)}
             placeholder="Equipment, institution, brand or tender reference…" />
         </label>
+        {priorityEquipment && (
+          <p>
+            Priority equipment filter:{" "}
+            {PRIORITY_EQUIPMENT.find((p) => p.id === priorityEquipment)?.label}{" "}
+            <button
+              className="text-button"
+              onClick={() => setPriorityEquipment("")}
+            >
+              Clear priority filter
+            </button>
+          </p>
+        )}
         <div className="filter-grid">
           <label>Unknown-deadline region
             <select value={region} onChange={(e) => { setRegion(e.target.value); setInstitution(""); }}>

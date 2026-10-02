@@ -44,8 +44,9 @@ vi.mock("@/lib/sources/registry", () => {
     fetch: mocks.fetch,
   };
   return {
-    adapters: [adapter],
-    getAdapter: (id: string) => (id === adapter.id ? adapter : undefined),
+    adapters: [adapter, {...adapter, id: "gem-direct-himachal"}],
+    getAdapter: (id: string) => ["test-source", "gem-direct-himachal"].includes(id)
+      ? {...adapter, id} : undefined,
   };
 });
 vi.mock("@/lib/cache/redis", () => ({
@@ -226,5 +227,79 @@ describe("Official source cache", () => {
     expect(reread.status).toBe("SUCCESS");
     expect(reread.records).toEqual(refreshed.records);
     expect(mocks.fetch).toHaveBeenCalledTimes(2);
+  });
+});
+
+const gemResult = (status: SourceFetchResult["status"], title?: string, bid = "GEM/2026/B/7987137") => {
+  const snapshot = result(status, title);
+  return {...snapshot, sourceId: "gem-direct-himachal", records: snapshot.records.map((r) => ({
+    ...r, sourceId: "gem-direct-himachal", tenderId: bid,
+  }))};
+};
+describe("partial direct GeM snapshot retention", () => {
+  it("retains omitted prior bids as stale without advancing their check time, while new bids stay fresh", async () => {
+    const original = gemResult("SUCCESS", "Defibrillator");
+    mocks.fetch.mockResolvedValueOnce(original);
+    const {cachedSource, invalidateSources} = await import("@/lib/cache/source-cache");
+    await cachedSource("gem-direct-himachal");
+    vi.advanceTimersByTime(60_000);
+    mocks.fetch.mockResolvedValueOnce(gemResult("PARTIAL", "Ventilator", "GEM/2026/B/7885248"));
+    invalidateSources(); finishInvalidationRequest();
+    const current = await cachedSource("gem-direct-himachal");
+    expect(current.status).toBe("PARTIAL");
+    expect(current.stale).toBe(false);
+    expect(current.records).toHaveLength(2);
+    expect(current.records[0].stale).toBeUndefined();
+    expect(current.records[1]).toMatchObject({title: "Defibrillator", stale: true, fetchedAt: original.records[0].fetchedAt});
+    expect(current.records[1].notes?.join(" ")).toContain("Not seen in the current partial GeM fetch");
+    expect(current.metrics.rawRecords).toBe(2);
+    expect(mocks.writeDurable).toHaveBeenLastCalledWith(expect.objectContaining({records: current.records}));
+  });
+  it("uses the current matching bid including cancellation and removes retained records after a complete empty listing", async () => {
+    mocks.fetch.mockResolvedValueOnce(gemResult("SUCCESS", "Original"));
+    const {cachedSource, invalidateSources} = await import("@/lib/cache/source-cache");
+    await cachedSource("gem-direct-himachal");
+    const cancelled = gemResult("PARTIAL", "Cancellation");
+    cancelled.records[0].cancelled = true;
+    mocks.fetch.mockResolvedValueOnce(cancelled);
+    invalidateSources(); finishInvalidationRequest();
+    const current = await cachedSource("gem-direct-himachal");
+    expect(current.records).toEqual(cancelled.records);
+    expect(current.records).toHaveLength(1);
+    mocks.fetch.mockResolvedValueOnce(gemResult("SUCCESS"));
+    invalidateSources(); finishInvalidationRequest();
+    expect((await cachedSource("gem-direct-himachal")).records).toEqual([]);
+  });
+  it("does not renew retained rows during repeated partial fetches beyond 24 hours", async () => {
+    const original = gemResult("SUCCESS", "Old defibrillator");
+    mocks.fetch.mockResolvedValueOnce(original);
+    const {cachedSource, invalidateSources} = await import("@/lib/cache/source-cache");
+    await cachedSource("gem-direct-himachal");
+    vi.advanceTimersByTime(23 * 60 * 60 * 1000);
+    mocks.fetch.mockResolvedValueOnce(gemResult("PARTIAL"));
+    invalidateSources(); finishInvalidationRequest();
+    const retained = await cachedSource("gem-direct-himachal");
+    expect(retained.records[0].fetchedAt).toBe(original.records[0].fetchedAt);
+    vi.advanceTimersByTime(2 * 60 * 60 * 1000);
+    mocks.fetch.mockResolvedValueOnce(gemResult("PARTIAL"));
+    invalidateSources(); finishInvalidationRequest();
+    expect((await cachedSource("gem-direct-himachal")).records).toEqual([]);
+  });
+  it("can recover a prior bounded durable observation on a cold partial fetch", async () => {
+    const original = gemResult("SUCCESS", "Durable defibrillator");
+    mocks.readDurable.mockResolvedValue(original);
+    mocks.fetch.mockResolvedValueOnce(gemResult("PARTIAL"));
+    const {cachedSource} = await import("@/lib/cache/source-cache");
+    expect((await cachedSource("gem-direct-himachal")).records[0]).toMatchObject({
+      title: "Durable defibrillator", stale: true, fetchedAt: original.records[0].fetchedAt,
+    });
+  });
+  it("does not change partial retention behaviour for other adapters", async () => {
+    mocks.fetch.mockResolvedValueOnce(result("SUCCESS", "Old monitor"));
+    const {cachedSource, invalidateSources} = await import("@/lib/cache/source-cache");
+    await cachedSource("test-source");
+    mocks.fetch.mockResolvedValueOnce(result("PARTIAL"));
+    invalidateSources(); finishInvalidationRequest();
+    expect((await cachedSource("test-source")).records).toEqual([]);
   });
 });
