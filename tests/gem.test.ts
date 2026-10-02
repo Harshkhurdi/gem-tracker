@@ -5,6 +5,7 @@ import {
   GEM_SEARCH_PAGE,
   gemListingDate,
   gemListingRecord,
+  selectGemOrganisations,
 } from "../src/lib/sources/adapters/gem";
 import { SourceHttp } from "../src/lib/sources/http";
 import { normalizeTender } from "../src/lib/tender/normalize";
@@ -31,6 +32,7 @@ function response(docs: Doc[], total = docs.length, start = 0) {
 function mockSearch(pages: Record<number, string | Error>, region: Region = "Chandigarh") {
   return vi.spyOn(SourceHttp.prototype, "text").mockImplementation(async (url, init) => {
     if (url === GEM_SEARCH_PAGE) return pageHtml;
+    if (url.endsWith("/org-list-adv")) return "[]";
     if (url.endsWith("/ministry-list-adv")) return JSON.stringify({ status: 200, data: { BuyerStateList: [] } });
     expect(url).toBe("https://bidplus.gem.gov.in/search-bids");
     expect(init?.method).toBe("POST");
@@ -74,6 +76,7 @@ describe("official GeM regional discovery", () => {
     const recoveryDates: string[] = [];
     vi.spyOn(SourceHttp.prototype, "text").mockImplementation(async (url, init) => {
       if (url === GEM_SEARCH_PAGE) return pageHtml;
+    if (url.endsWith("/org-list-adv")) return "[]";
       if (url.endsWith("/ministry-list-adv")) return JSON.stringify({ status: 200, data: { BuyerStateList: [] } });
       expect(url).toBe("https://bidplus.gem.gov.in/search-bids");
       const form = new URLSearchParams(init?.body as URLSearchParams);
@@ -106,6 +109,7 @@ describe("official GeM regional discovery", () => {
     const recoveryDates: string[] = [];
     vi.spyOn(SourceHttp.prototype, "text").mockImplementation(async (url, init) => {
       if (url === GEM_SEARCH_PAGE) return pageHtml;
+    if (url.endsWith("/org-list-adv")) return "[]";
       if (url.endsWith("/ministry-list-adv")) return JSON.stringify({ status: 200, data: { BuyerStateList: [] } });
       const payload = JSON.parse(new URLSearchParams(init?.body as URLSearchParams).get("payload")!);
       if (payload.bidEndFromCon) {
@@ -131,6 +135,7 @@ describe("official GeM regional discovery", () => {
     vi.spyOn(Date, "now").mockImplementation(() => clock);
     vi.spyOn(SourceHttp.prototype, "text").mockImplementation(async (url, init) => {
       if (url === GEM_SEARCH_PAGE) return pageHtml;
+    if (url.endsWith("/org-list-adv")) return "[]";
       if (url.endsWith("/ministry-list-adv")) return JSON.stringify({ status: 200, data: { BuyerStateList: [] } });
       const payload = JSON.parse(new URLSearchParams(init?.body as URLSearchParams).get("payload")!);
       if (payload.bidEndFromCon) recoveryCalls++;
@@ -152,6 +157,7 @@ describe("official GeM regional discovery", () => {
     const buyerQueries: unknown[] = [];
     vi.spyOn(SourceHttp.prototype, "text").mockImplementation(async (url, init) => {
       if (url === GEM_SEARCH_PAGE) return pageHtml;
+    if (url.endsWith("/org-list-adv")) return "[]";
       const form = new URLSearchParams(init?.body as URLSearchParams);
       expect(form.get("csrf_bd_gem_nk")).toBe("public-session");
       expect(init?.method).toBe("POST");
@@ -184,6 +190,111 @@ describe("official GeM regional discovery", () => {
     expect(tender?.priorityCategories).toContain("DEFIBRILLATORS");
     expect(tender?.effectiveClosingDate).toBe("2026-10-05T13:00:00+05:30");
     expect(result.notes.join(" ")).toContain("State-government buyer search: 1 unique bids read of 1");
+  });
+
+  it("selects exact returned human-health buyer names without a nationwide generic campus search", () => {
+    const name = "Government Medical College Amritsar ";
+    expect(selectGemOrganisations([name, name.toUpperCase(), "Punjab Police", "Deputy Director Animal Health Services", "Dr Yashwant Singh Parmar University of Horticulture", "PUNJAB HEALTH SYSTEMS CORPORATION"], "Punjab", true))
+      .toEqual([name, "PUNJAB HEALTH SYSTEMS CORPORATION"]);
+    expect(selectGemOrganisations([pgimer, "All India Institute of Medical Sciences (AIIMS)", "Hospital Services Consultancy Corporation", "Government Medical College Amritsar", "GMCH Guwahati", "PGIMER Guwahati"], "Chandigarh", false)).toEqual([pgimer]);
+    expect(() => selectGemOrganisations({ names: [pgimer] }, "Chandigarh", false)).toThrow();
+  });
+
+  it("recovers a bid on an entirely unseen closing date through its official organisation", async () => {
+    const known = doc();
+    const missing = doc("8005979", "9857868", "ICU beds", "2026-11-01T14:00:00Z");
+    let organisationCalls = 0;
+    vi.spyOn(SourceHttp.prototype, "text").mockImplementation(async (url, init) => {
+      if (url === GEM_SEARCH_PAGE) return pageHtml;
+      if (url.endsWith("/ministry-list-adv")) return JSON.stringify({status:200,data:{BuyerStateList:[],MinistryList:["Ministry of Health and Family Welfare"]}});
+      const form = new URLSearchParams(init?.body as URLSearchParams);
+      expect(form.get("csrf_bd_gem_nk")).toBe("public-session");
+      if (url.endsWith("/org-list-adv")) {
+        expect(form.get("ministry")).toBe("Ministry of Health and Family Welfare");
+        expect(form.has("buyer_state")).toBe(false);
+        return JSON.stringify([pgimer]);
+      }
+      const q = JSON.parse(form.get("payload")!);
+      if (q.organization) {
+        organisationCalls++;
+        expect(q).toEqual({searchType:"ministry-search",ministry:"Ministry of Health and Family Welfare",buyerState:"",organization:pgimer,department:"",bidEndFromMin:"",bidEndToMin:"",page:1});
+        return response([known,missing]);
+      }
+      return response([known]);
+    });
+    const documents = vi.spyOn(SourceHttp.prototype,"documentText").mockImplementation(async (url) => pdf(url.endsWith('/9857868') ? missing : known));
+    const result = await createGemAdapter("Chandigarh").fetch();
+    expect(result.status).toBe("SUCCESS");
+    expect(result.records.map((r)=>r.tenderId)).toEqual(expect.arrayContaining([known.b_bid_number[0],missing.b_bid_number[0]]));
+    expect(result.records).toHaveLength(2);
+    expect(documents).toHaveBeenCalledTimes(2);
+    expect(organisationCalls).toBe(1);
+    expect(result.notes.join(" ")).toContain("Regional GeM search: 1 unique bids");
+    expect(result.notes.join(" ")).toContain("Targeted organisation recovery: 1 additional unique bids");
+    const recovered = normalizeTender(result.records.find((r)=>r.tenderId===missing.b_bid_number[0])!,false,new Date("2026-10-02T10:00:00+05:30"));
+    expect(recovered?.institutionId).toBe("pgimer");
+    expect(recovered?.priorityCategories).toContain("HOSPITAL_BEDS");
+  });
+
+  it.each(["wrong identity","unrelated buyer"])("does not trust the organisation query when the recovered PDF has %s", async (failure) => {
+    const known = doc(), missing = doc("8005979","9857868","ICU beds");
+    vi.spyOn(SourceHttp.prototype,"text").mockImplementation(async (url,init)=>{
+      if(url===GEM_SEARCH_PAGE)return pageHtml;
+      if(url.endsWith('/ministry-list-adv'))return JSON.stringify({status:200,data:{BuyerStateList:[],MinistryList:["Ministry of Health and Family Welfare"]}});
+      if(url.endsWith('/org-list-adv'))return JSON.stringify([pgimer]);
+      const q=JSON.parse(new URLSearchParams(init?.body as URLSearchParams).get('payload')!);
+      return response(q.organization ? [missing] : [known]);
+    });
+    vi.spyOn(SourceHttp.prototype,"documentText").mockImplementation(async(url)=>url.endsWith('/9857868')
+      ? failure==='wrong identity' ? pdf(doc('9999999')) : pdf(missing,'Indian Army','Military Hospital Chandigarh') : pdf(known));
+    const result=await createGemAdapter('Chandigarh').fetch();
+    expect(result.records).toHaveLength(1);
+    expect(result.records[0].tenderId).toBe(known.b_bid_number[0]);
+    if(failure==='wrong identity')expect(result.status).toBe('PARTIAL');
+  });
+
+  it("keeps regional records when optional organisation discovery fails", async()=>{
+    const known=doc();
+    vi.spyOn(SourceHttp.prototype,'text').mockImplementation(async(url)=>{
+      if(url===GEM_SEARCH_PAGE)return pageHtml;
+      if(url.endsWith('/ministry-list-adv'))return JSON.stringify({status:200,data:{BuyerStateList:[],MinistryList:["Ministry of Health and Family Welfare"]}});
+      if(url.endsWith('/org-list-adv'))throw Error('Optional organisation lookup failed');
+      return response([known]);
+    });
+    vi.spyOn(SourceHttp.prototype,'documentText').mockResolvedValue(pdf(known));
+    const result=await createGemAdapter('Chandigarh').fetch();
+    expect(result.status).toBe('PARTIAL');expect(result.records).toHaveLength(1);
+    expect(result.notes.join(' ')).toContain('regional records remain available');
+  });
+
+  it("caps all organisation lookup/result requests together at 24 and each buyer at 8 pages",async()=>{
+    const known=doc();let supplementalCalls=0;const queriedPages:number[]=[];
+    vi.spyOn(SourceHttp.prototype,'text').mockImplementation(async(url,init)=>{
+      if(url===GEM_SEARCH_PAGE)return pageHtml;
+      if(url.endsWith('/ministry-list-adv'))return JSON.stringify({status:200,data:{BuyerStateList:['CHANDIGARH']}});
+      if(url.endsWith('/org-list-adv')){supplementalCalls++;return JSON.stringify(Array.from({length:10},(_,i)=>`Health Services ${i}`));}
+      const q=JSON.parse(new URLSearchParams(init?.body as URLSearchParams).get('payload')!);
+      if(q.organization){supplementalCalls++;queriedPages.push(q.page);return response([known],1000,(q.page-1)*10);}
+      return response([known]);
+    });
+    const pdfChecks=vi.spyOn(SourceHttp.prototype,'documentText').mockResolvedValue(pdf(known));
+    const result=await createGemAdapter('Chandigarh').fetch();
+    expect(supplementalCalls).toBe(24);expect(Math.max(...queriedPages)).toBe(8);
+    expect(result.status).toBe('PARTIAL');expect(result.records).toHaveLength(1);
+    expect(pdfChecks).toHaveBeenCalledTimes(1);
+    expect(result.notes.join(' ')).toContain('24/24 supplemental requests');
+  });
+
+  it("does not add organisation traffic after exhausting the shared 400-request search limit",async()=>{
+    const nonmedical=doc('7885248','9718972','Office chairs');let searches=0,lookups=0;
+    vi.spyOn(SourceHttp.prototype,'text').mockImplementation(async(url,init)=>{
+      if(url===GEM_SEARCH_PAGE)return pageHtml;
+      if(url.endsWith('/ministry-list-adv')||url.endsWith('/org-list-adv')){lookups++;throw Error('Budget should stop this lookup');}
+      const q=JSON.parse(new URLSearchParams(init?.body as URLSearchParams).get('payload')!);
+      searches++;return response([nonmedical],4100,(q.page-1)*10);
+    });
+    const result=await createGemAdapter('Chandigarh').fetch();
+    expect(searches).toBe(400);expect(lookups).toBe(0);expect(result.status).toBe('PARTIAL');expect(result.records).toEqual([]);
   });
 
   it("reports a changed search schema unavailable instead of a successful empty result", async () => {

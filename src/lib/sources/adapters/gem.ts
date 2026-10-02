@@ -105,6 +105,25 @@ export function enrichGemBuyer(raw: RawTender, text: string): boolean {
   return true;
 }
 
+/** Select only returned human-health/monitored-buyer names; the PDF still decides attribution. */
+export function selectGemOrganisations(values: unknown, region: Region, stateScoped: boolean): string[] {
+  if (!Array.isArray(values) || values.length > 2000 || values.some((v) => typeof v !== "string" || v.length > 500))
+    throw Error("Official GeM organisation list structure changed");
+  const seen = new Set<string>();
+  return (values as string[]).filter((name) => {
+    const key = name.trim().toLowerCase();
+    if (!key || seen.has(key) || /\b(?:animal|veterinary|horticulture)\b/i.test(name)) return false;
+    // The central root is deliberately PGIMER-only. Generic campus names or
+    // short aliases (e.g. GMCH) cannot justify a nationwide organisation query.
+    const monitored = stateScoped ? matchInstitutions(name, region).length > 0
+      : region === "Chandigarh" && /\b(?:post graduate institute of medical education and research|pgimer)\b/i.test(name) && /\bchandigarh\b/i.test(name);
+    const regionalHealth = stateScoped && /\b(?:health (?:and family welfare|services|systems)|medical education|medical college|institute of medical scien(?:ce|ces)|university of health sciences)\b/i.test(name);
+    if (!monitored && !regionalHealth) return false;
+    seen.add(key);
+    return true;
+  }).sort((a, b) => Number(!!matchInstitutions(b, region).length) - Number(!!matchInstitutions(a, region).length));
+}
+
 export function createGemAdapter(region: Region): TenderSourceAdapter {
   const id = region === "Chandigarh" ? "gem-direct" : `gem-direct-${region === "Punjab" ? "punjab" : "himachal"}`;
   const adapter: TenderSourceAdapter = {
@@ -121,18 +140,21 @@ export function createGemAdapter(region: Region): TenderSourceAdapter {
         const fetchedAt = new Date().toISOString(), notes: string[] = [];
         let partial = false;
         const docs = new Map<string, GemDocument>();
+        const regionalIds = new Set<string>();
         let searchRequests = 0;
-        const search = async (page: number, date = "", buyerState = "") => {
-          if (++searchRequests > 400) throw Error("GeM regional search request limit reached");
+        const canSearch = () => Date.now() < searchDeadline && searchRequests < 400;
+        const search = async (page: number, date = "", buyerState = "", ministry = "", organization = "") => {
+          if (!canSearch()) throw Error("GeM search request or time limit reached");
+          searchRequests++;
           return parseGemSearchPage(JSON.parse(await gemRequest(() => http.text(`${origin}/search-bids`, {
           method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded", "X-Requested-With": "XMLHttpRequest", Referer: GEM_SEARCH_PAGE },
-          body: new URLSearchParams({ csrf_bd_gem_nk: token, payload: JSON.stringify(buyerState ? { searchType: "ministry-search", ministry: "", buyerState, organization: "", department: "", bidEndFromMin: "", bidEndToMin: "", page } : { searchType: "con", state_name_con: region, city_name_con: "", bidEndFromCon: date, bidEndToCon: date, page }) }),
+          body: new URLSearchParams({ csrf_bd_gem_nk: token, payload: JSON.stringify(buyerState || ministry ? { searchType: "ministry-search", ministry, buyerState, organization, department: "", bidEndFromMin: "", bidEndToMin: "", page } : { searchType: "con", state_name_con: region, city_name_con: "", bidEndFromCon: date, bidEndToCon: date, page }) }),
         }))));
         };
         const first = await search(1);
         const collect = (page: Awaited<ReturnType<typeof search>>, expectedStart: number, expectedTotal = first.total) => {
           if (page.start !== expectedStart || page.total !== expectedTotal || (!page.docs.length && expectedStart < expectedTotal)) partial = true;
-          for (const d of page.docs) docs.set(scalar(d.b_id), d);
+          for (const d of page.docs) { regionalIds.add(scalar(d.b_id)); docs.set(scalar(d.b_id), d); }
         };
         collect(first, 0);
         // Walk every reported page, not a fixed 'latest N' slice. Guard a corrupt count.
@@ -140,16 +162,68 @@ export function createGemAdapter(region: Region): TenderSourceAdapter {
         if (pages > maximum) partial = true;
         let nextPage = 2;
         await Promise.all(Array.from({ length: 6 }, async () => {
-          while (nextPage <= maximum) {
+          while (nextPage <= maximum && canSearch()) {
             const p = nextPage++;
             try { collect(await search(p), (p - 1) * 10); }
             catch { partial = true; notes.push(`GeM result page ${p} could not be read; coverage is incomplete.`); }
           }
         }));
-        if (docs.size < first.total && Date.now() < searchDeadline && searchRequests < 400) {
+        if (nextPage <= maximum) { partial = true; notes.push("Regional GeM pagination stopped at the shared search request/time limit."); }
+        // Narrow official buyer queries recover entirely unseen closing-date groups.
+        // Use the same total search budget; reserve no extra concurrency or PDF trust.
+        let buyerList: { status?: number; data?: { BuyerStateList?: string[]; MinistryList?: string[] } } | undefined;
+        try {
+          if (!canSearch()) throw Error("GeM listing budget exhausted");
+          buyerList = JSON.parse(await gemRequest(() => http.text(`${origin}/ministry-list-adv`, {
+            method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded", "X-Requested-With": "XMLHttpRequest", Referer: GEM_SEARCH_PAGE },
+            body: new URLSearchParams({ csrf_bd_gem_nk: token }),
+          })));
+          if (buyerList?.status !== 200 || !Array.isArray(buyerList.data?.BuyerStateList) ||
+              buyerList.data.BuyerStateList.some((v) => typeof v !== "string")) throw Error("GeM buyer state list changed");
+          const state = buyerList.data.BuyerStateList.find((v) => v.toLowerCase() === region.toLowerCase());
+          const healthMinistry = region === "Chandigarh" && buyerList.data.MinistryList?.find((v) => v === "Ministry of Health and Family Welfare");
+          const roots = [state && { buyerState: state, ministry: "" }, healthMinistry && { buyerState: "", ministry: healthMinistry }].filter((v): v is { buyerState: string; ministry: string } => !!v);
+          let supplementalRequests = 0, selectedCount = 0, added = 0;
+          for (const root of roots) {
+            if (!canSearch() || supplementalRequests >= 24 || selectedCount >= 6) { partial = true; break; }
+            supplementalRequests++; searchRequests++;
+            const names = selectGemOrganisations(JSON.parse(await gemRequest(() => http.text(`${origin}/org-list-adv`, {
+              method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded", "X-Requested-With": "XMLHttpRequest", Referer: GEM_SEARCH_PAGE },
+              body: new URLSearchParams({ csrf_bd_gem_nk: token, ...(root.buyerState ? { buyer_state: root.buyerState } : { ministry: root.ministry }) }),
+            }))), region, !!root.buyerState);
+            for (const name of names) {
+              if (!canSearch() || supplementalRequests >= 24 || selectedCount >= 6) { partial = true; break; }
+              selectedCount++;
+              try {
+                supplementalRequests++;
+                const initial = await search(1, "", root.buyerState, root.ministry, name);
+                const ids = new Set<string>();
+                const add = (page: Awaited<ReturnType<typeof search>>, start: number) => {
+                  if (page.total !== initial.total || page.start !== start) partial = true;
+                  for (const d of page.docs) {
+                    const id = scalar(d.b_id); ids.add(id);
+                    if (!docs.has(id)) added++;
+                    docs.set(id, d);
+                  }
+                };
+                add(initial, 0);
+                const pages = Math.min(Math.ceil(initial.total / 10), 8);
+                for (let page = 2; page <= pages && canSearch() && supplementalRequests < 24; page++) {
+                  supplementalRequests++;
+                  try { add(await search(page, "", root.buyerState, root.ministry, name), (page - 1) * 10); }
+                  catch { partial = true; }
+                }
+                if (ids.size !== initial.total) partial = true;
+                notes.push(`Organisation search ${name}: ${ids.size} unique bids read of ${initial.total}.`);
+              } catch { partial = true; notes.push(`Organisation search ${name} could not be completed.`); }
+            }
+          }
+          notes.push(`Targeted organisation recovery: ${added} additional unique bids; ${supplementalRequests}/24 supplemental requests used, at most 6 organisations and 8 result pages each.`);
+        } catch { partial = true; notes.push("Targeted organisation discovery was incomplete; regional records remain available."); }
+        if (regionalIds.size < first.total && canSearch()) {
           // Missing, failed or repeated broad pages can omit bids. Re-query
           // observed closing-date groups while the original request/time budget remains.
-          const dates = [...new Set([...docs.values()].map((d) => gemListingDate(d.final_end_date_sort)?.slice(0, 10)).filter((d): d is string => !!d))];
+          const dates = [...new Set([...regionalIds].map((id) => gemListingDate(docs.get(id)!.final_end_date_sort)?.slice(0, 10)).filter((d): d is string => !!d))];
           let dateCursor = 0;
           await Promise.all(Array.from({ length: 6 }, async () => {
             while (dateCursor < dates.length && Date.now() < searchDeadline && searchRequests < 400) {
@@ -165,18 +239,14 @@ export function createGemAdapter(region: Region): TenderSourceAdapter {
           }));
           notes.push("Incomplete broad-search records were supplemented with closing-date group searches.");
         }
-        if (docs.size !== first.total) partial = true;
-        notes.unshift(`Regional GeM search: ${docs.size} unique bids read from ${pages} reported pages (${first.total} reported bids).`);
+        if (regionalIds.size !== first.total) partial = true;
+        notes.unshift(`Regional GeM search: ${regionalIds.size} unique bids read from ${pages} reported pages (${first.total} reported bids).`);
         // Buyer-state search is a distinct public form option. It catches regional
         // health procurement missed by unstable consignee-page boundaries, with
         // at most 20 additional result pages per region.
         try {
-          const list = JSON.parse(await gemRequest(() => http.text(`${origin}/ministry-list-adv`, {
-            method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded", "X-Requested-With": "XMLHttpRequest", Referer: GEM_SEARCH_PAGE },
-            body: new URLSearchParams({ csrf_bd_gem_nk: token }),
-          }))) as { status?: number; data?: { BuyerStateList?: string[] } };
-          if (list.status !== 200 || !Array.isArray(list.data?.BuyerStateList)) throw Error("GeM buyer state list changed");
-          const state = list.data.BuyerStateList.find((s) => s.toLowerCase() === region.toLowerCase());
+          if (buyerList?.status !== 200 || !Array.isArray(buyerList.data?.BuyerStateList)) throw Error("GeM buyer state list unavailable");
+          const state = buyerList.data.BuyerStateList.find((s) => s.toLowerCase() === region.toLowerCase());
           if (state) {
             const buyer = await search(1, "", state);
             const buyerIds = new Set<string>();
