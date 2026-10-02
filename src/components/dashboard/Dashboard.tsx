@@ -559,7 +559,7 @@ export default function Dashboard() {
             access varies by portal
           </span>
         </div>
-        <nav className="tabs" aria-label="Dashboard views">
+        <nav className="tabs" aria-label="Dashboard views" style={{ overflowX: "auto" }}>
           {[
             ["opportunities", "Opportunities", tenders.length],
             ["documents", "Document links", tenders.length],
