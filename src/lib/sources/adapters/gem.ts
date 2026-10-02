@@ -91,7 +91,8 @@ export function enrichGemBuyer(raw: RawTender, text: string): boolean {
   if (/All India Institute Of Medical Sciences/i.test(organisation))
     matches = [...matches, ...matchInstitutions(`AIIMS ${office}`, raw.region)];
   raw.organisation = organisation;
-  raw.location = [office, consigneeBlocks].filter(Boolean).join(" ");
+  // Consignee pages remain matching evidence, not a user-facing address.
+  raw.location = office.slice(0, 160) || undefined;
   raw.consignees = [...new Map(matches.map((i) => [i.id, { institutionId: i.id, name: i.shortName }])).values()];
   if (raw.consignees.length === 1) raw.institutionId = raw.consignees[0].institutionId;
   const scope = productEvidence(text);
@@ -111,13 +112,14 @@ export function createGemAdapter(region: Region): TenderSourceAdapter {
     institutionIds: institutions.filter((i) => i.region === region).map((i) => i.id),
     async fetch() {
       const result = await runAdapter(adapter, async () => {
+        const searchDeadline = Date.now() + 90000;
         const http = new SourceHttp({ budgetMs: 90000, timeoutMs: 16000 });
         const html = await gemRequest(() => http.text(GEM_SEARCH_PAGE));
         // The public page exposes this form field. Keep it in this in-memory session only.
         const token = html.match(/['"]csrf_bd_gem_nk['"]\s*:\s*['"]([^'"]+)['"]/)?.[1];
         if (!token || !html.includes(`${origin}/search-bids`)) throw Error("Official GeM public search is unavailable");
         const fetchedAt = new Date().toISOString(), notes: string[] = [];
-        let partial = false, received = 0;
+        let partial = false;
         const docs = new Map<string, GemDocument>();
         let searchRequests = 0;
         const search = async (page: number, date = "", buyerState = "") => {
@@ -130,7 +132,6 @@ export function createGemAdapter(region: Region): TenderSourceAdapter {
         const first = await search(1);
         const collect = (page: Awaited<ReturnType<typeof search>>, expectedStart: number, expectedTotal = first.total) => {
           if (page.start !== expectedStart || page.total !== expectedTotal || (!page.docs.length && expectedStart < expectedTotal)) partial = true;
-          received += page.docs.length;
           for (const d of page.docs) docs.set(scalar(d.b_id), d);
         };
         collect(first, 0);
@@ -145,24 +146,24 @@ export function createGemAdapter(region: Region): TenderSourceAdapter {
             catch { partial = true; notes.push(`GeM result page ${p} could not be read; coverage is incomplete.`); }
           }
         }));
-        if (docs.size < first.total && received === first.total) {
-          // GeM broad searches can repeat a bid across page boundaries. Re-query
-          // smaller closing-date groups instead of silently accepting the missing slice.
+        if (docs.size < first.total && Date.now() < searchDeadline && searchRequests < 400) {
+          // Missing, failed or repeated broad pages can omit bids. Re-query
+          // observed closing-date groups while the original request/time budget remains.
           const dates = [...new Set([...docs.values()].map((d) => gemListingDate(d.final_end_date_sort)?.slice(0, 10)).filter((d): d is string => !!d))];
           let dateCursor = 0;
           await Promise.all(Array.from({ length: 6 }, async () => {
-            while (dateCursor < dates.length) {
+            while (dateCursor < dates.length && Date.now() < searchDeadline && searchRequests < 400) {
               const date = dates[dateCursor++].split("-").reverse().join("-");
               try {
                 const bucket = await search(1, date);
                 collect(bucket, 0, bucket.total);
                 const bucketPages = Math.min(Math.ceil(bucket.total / 10), 500);
                 if (bucket.total > 5000) partial = true;
-                for (let page = 2; page <= bucketPages; page++) collect(await search(page, date), (page - 1) * 10, bucket.total);
+                for (let page = 2; page <= bucketPages && Date.now() < searchDeadline && searchRequests < 400; page++) collect(await search(page, date), (page - 1) * 10, bucket.total);
               } catch { partial = true; notes.push("Some GeM closing-date recovery searches could not be read."); }
             }
           }));
-          notes.push("Repeated broad-search records were supplemented with closing-date group searches.");
+          notes.push("Incomplete broad-search records were supplemented with closing-date group searches.");
         }
         if (docs.size !== first.total) partial = true;
         notes.unshift(`Regional GeM search: ${docs.size} unique bids read from ${pages} reported pages (${first.total} reported bids).`);

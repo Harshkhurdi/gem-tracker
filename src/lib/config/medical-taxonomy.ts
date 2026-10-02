@@ -82,7 +82,7 @@ export const MEDICAL_RULES: MedicalRule[] = [
   {
     category: "HOSPITAL_BEDS",
     pattern:
-      /\b(?:hospital bed\w*|icu bed\w*|icu cots?|ward beds?|medical beds?|(?:five|three)[ -]function beds?|clinical bed\w*|patient bed\w*|critical[ -]care bed\w*|med[ -]surg bed\w*|pa?ediatric bed\w*|bariatric bed\w*|birthing bed\w*|obstetric bed\w*|smart bed\w*|electric (?:icu |hospital )?bed\w*|motoris?zed hospital bed\w*|electric medical bed\w*)\b/i,
+      /\b(?:hospital bed\w*|icu bed\w*|icu cots?|ward beds?|medical beds?|(?:five|three)[ -]function beds?|clinical bed\w*|patient beds?(?![ -]*side\b)|critical[ -]care bed\w*|med[ -]surg bed\w*|pa?ediatric bed\w*|bariatric bed\w*|birthing bed\w*|obstetric bed\w*|smart bed\w*|electric (?:icu |hospital )?bed\w*|motoris?zed hospital bed\w*|electric medical bed\w*)\b/i,
   },
   {
     category: "STRETCHERS",

@@ -385,3 +385,17 @@ describe("biochemistry procurement scope", () => {
     ).toBe(false);
   });
 });
+
+// Actual EEG specification describes its place of use, not a purchased bed.
+describe("bedside use context", () => {
+  it.each(["bed side", "bedside", "bed-side"])("does not classify EEG used at a patient %s as hospital beds", (bedside) => {
+    const text = `EEG Machine. Portability: unit should be mobile and usable at patient ${bedside} in operating rooms, ICU and wards on a trolley/cart.`;
+    const result = classifyMedical(text);
+    expect(result.isMedical).toBe(true);
+    expect(result.categories).not.toContain("HOSPITAL_BEDS");
+    expect(matchBrands(text)).not.toContainEqual(expect.objectContaining({ brand: "LINET" }));
+  });
+  it.each(["Patient bed", "Patient beds", "ICU beds with mattresses"])("retains actual bed procurement: %s", (text) => {
+    expect(classifyMedical(text).categories).toContain("HOSPITAL_BEDS");
+  });
+});

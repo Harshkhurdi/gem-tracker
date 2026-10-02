@@ -133,3 +133,5 @@ The structured sections include technical requirements, accessories/consumables,
 Already downloaded official PDF bytes can be shared with priority extraction for at most 60 seconds in a bounded 32 MB/12-document memory cache. This avoids a second download immediately after normal metadata inspection. Buffers are copied before PDF worker transfer; expired entries require a new official request.
 
 Partial GeM refreshes retain missing previously seen bids for up to 24 hours with their original check times and a stale marker. They are never presented as newly verified. A complete fetch replaces the prior snapshot, and terminal cancellation notices still take precedence. Portal outages, protected documents and inconsistent pagination mean zero-gap coverage cannot be guaranteed.
+
+The Vercel Node backend is configured in Mumbai (`bom1`) through `vercel.json`. Direct GeM requests timed out from the previous US region; public regional searches and documents were successfully checked from Mumbai after deployment.

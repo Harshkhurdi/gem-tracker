@@ -101,6 +101,50 @@ describe("official GeM regional discovery", () => {
     expect(result.records.some((r) => r.tenderId === "GEM/2026/B/7885268")).toBe(complete);
   });
 
+  it.each(["failed", "short"])("recovers a missed priority bid after a %s broad page while keeping partial status", async (gap) => {
+    const bids = Array.from({ length: 11 }, (_, i) => doc(String(7885248 + i), String(9718972 + i)));
+    const recoveryDates: string[] = [];
+    vi.spyOn(SourceHttp.prototype, "text").mockImplementation(async (url, init) => {
+      if (url === GEM_SEARCH_PAGE) return pageHtml;
+      if (url.endsWith("/ministry-list-adv")) return JSON.stringify({ status: 200, data: { BuyerStateList: [] } });
+      const payload = JSON.parse(new URLSearchParams(init?.body as URLSearchParams).get("payload")!);
+      if (payload.bidEndFromCon) {
+        recoveryDates.push(payload.bidEndFromCon);
+        expect(payload.bidEndToCon).toBe(payload.bidEndFromCon);
+        return response([bids[10]]);
+      }
+      if (payload.page === 1) return response(bids.slice(0, 10), 11);
+      if (gap === "failed") throw Error("Transient broad-page failure");
+      return response([], 11, 10);
+    });
+    vi.spyOn(SourceHttp.prototype, "documentText").mockImplementation(async (url) => pdf(bids.find((d) => url.endsWith(`/${d.b_id[0]}`))!));
+    const result = await createGemAdapter("Chandigarh").fetch();
+    expect(recoveryDates).toEqual(["20-10-2026"]);
+    expect(result.status).toBe("PARTIAL");
+    expect(result.records).toHaveLength(11);
+    expect(result.records.map((r) => r.tenderId)).toContain(bids[10].b_bid_number[0]);
+  });
+
+  it("skips closing-date recovery after the original listing time budget expires", async () => {
+    const bids = Array.from({ length: 10 }, (_, i) => doc(String(7885248 + i), String(9718972 + i)));
+    let clock = Date.parse("2026-10-02T12:00:00Z"), recoveryCalls = 0;
+    vi.spyOn(Date, "now").mockImplementation(() => clock);
+    vi.spyOn(SourceHttp.prototype, "text").mockImplementation(async (url, init) => {
+      if (url === GEM_SEARCH_PAGE) return pageHtml;
+      if (url.endsWith("/ministry-list-adv")) return JSON.stringify({ status: 200, data: { BuyerStateList: [] } });
+      const payload = JSON.parse(new URLSearchParams(init?.body as URLSearchParams).get("payload")!);
+      if (payload.bidEndFromCon) recoveryCalls++;
+      if (payload.page === 1) return response(bids, 11);
+      clock += 90001;
+      throw Error("Listing time budget exhausted");
+    });
+    vi.spyOn(SourceHttp.prototype, "documentText").mockImplementation(async (url) => pdf(bids.find((d) => url.endsWith(`/${d.b_id[0]}`))!));
+    const result = await createGemAdapter("Chandigarh").fetch();
+    expect(recoveryCalls).toBe(0);
+    expect(result.status).toBe("PARTIAL");
+    expect(result.records).toHaveLength(10);
+  });
+
   it.each([false, true])("supplements regional results with state-health bids while preserving missing-page status: %s", async (missingPage) => {
     const regional = Array.from({ length: missingPage ? 10 : 1 }, (_, i) => doc(String(7885248 + i), String(9718972 + i)));
     const defibrillator = doc("7987137", "9836267", "Defibrillator", "2026-10-05T13:00:00Z");
@@ -227,6 +271,16 @@ describe("official GeM regional discovery", () => {
     expect(result.records[0].organisation).toBe(pgimer);
     expect(result.records[0].location).toBe("Chandigarh");
     expect(result.records[0].institutionId).toBe("pgimer");
+  });
+
+  it("keeps bulky consignee evidence for hospital matching without rendering it as the location", () => {
+    const d = doc();
+    const raw = gemListingRecord(d, "Chandigarh", "gem-direct", new Date().toISOString());
+    const text = pdf(d, "Ministry of Health", "Regional Office", `Consignees / Reporting Officer and Quantity\n${pgimer}\n${"corrupted PDF terms ".repeat(1000)}\u0001\nBuyer Added Bid Specific`);
+    expect(enrichGemBuyer(raw, text)).toBe(true);
+    expect(raw.institutionId).toBe("pgimer");
+    expect(raw.location).toBe("Regional Office");
+    expect(raw.location).not.toContain("corrupted");
   });
 
   it("uses declared priority items without treating GeMARPTS search suggestions as purchased equipment", async () => {
