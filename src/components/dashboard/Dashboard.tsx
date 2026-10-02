@@ -276,6 +276,93 @@ function TenderRows({
   );
 }
 
+function UnknownDeadlines({
+  tenders,
+  data,
+  clock,
+}: {
+  tenders: Tender[];
+  data: DashboardData | null;
+  clock: number;
+}) {
+  const [query, setQuery] = useState("");
+  const [region, setRegion] = useState("");
+  const [institution, setInstitution] = useState("");
+  const [category, setCategory] = useState("");
+  const unknown = useMemo(
+    () => tenders.filter((t) => t.status === "DEADLINE_UNKNOWN"),
+    [tenders],
+  );
+  const categories = useMemo(
+    () => [...new Set(unknown.flatMap((t) => t.categories))].sort(),
+    [unknown],
+  );
+  const rows = useMemo(
+    () => filterAndSortTenders(unknown, {
+      query, region, institution, category,
+      status: "DEADLINE_UNKNOWN", scope: "", brand: "", explicit: false,
+      source: "", closing: "", sort: "newest", prioritize: false,
+    }, clock),
+    [unknown, query, region, institution, category, clock],
+  );
+  function reset() {
+    setQuery("");
+    setRegion("");
+    setInstitution("");
+    setCategory("");
+  }
+  return (
+    <section aria-label="Unknown deadline tenders">
+      <div className="filter-panel">
+        <div className="filter-heading">
+          <h2>Unknown deadlines</h2>
+          <button className="text-button" onClick={reset}>Reset unknown-deadline filters</button>
+        </div>
+        <p>These tenders have no confirmed closing date. Check the official notice and any amendments before treating them as active.</p>
+        <label className="search-label">
+          <span>Search unknown deadlines</span>
+          <input type="search" value={query} onChange={(e) => setQuery(e.target.value)}
+            placeholder="Equipment, institution, brand or tender reference…" />
+        </label>
+        <div className="filter-grid">
+          <label>Unknown-deadline region
+            <select value={region} onChange={(e) => { setRegion(e.target.value); setInstitution(""); }}>
+              <option value="">All regions</option>
+              {["Chandigarh", "Punjab", "Himachal Pradesh"].map((r) => <option key={r}>{r}</option>)}
+            </select>
+          </label>
+          <label>Unknown-deadline institution
+            <select value={institution} onChange={(e) => setInstitution(e.target.value)}>
+              <option value="">All institutions</option>
+              {data?.institutions.filter((i) => !region || i.region === region).map((i) =>
+                <option key={i.id} value={i.id}>{i.shortName} · {i.city}</option>)}
+            </select>
+          </label>
+          <label>Unknown-deadline equipment category
+            <select value={category} onChange={(e) => setCategory(e.target.value)}>
+              <option value="">All categories</option>
+              {categories.map((c) => <option key={c} value={c}>{label(c)}</option>)}
+            </select>
+          </label>
+        </div>
+      </div>
+      <div className="results-panel">
+        <div className="section-heading"><div>
+          <h2>Tenders needing deadline verification <span className="count-pill">{rows.length}</span></h2>
+          <p>Newest published first. Open Details &amp; documents for the official source links.</p>
+        </div></div>
+        {rows.length ? <TenderRows rows={rows} data={data} /> : (
+          <div className="empty-state">
+            <h3>{data ? "No unknown deadlines match these filters" : "No results loaded yet"}</h3>
+            <p>{data ? "Try another region, institution or equipment category." : "Tender results are still loading."}</p>
+            <button onClick={reset}>Reset unknown-deadline filters</button>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
 export default function Dashboard() {
   const [clock, setClock] = useState(0);
   useEffect(() => {
@@ -561,7 +648,8 @@ export default function Dashboard() {
         </div>
         <nav className="tabs" aria-label="Dashboard views" style={{ overflowX: "auto" }}>
           {[
-            ["opportunities", "Opportunities", tenders.length],
+            ["opportunities", "Opportunities", filtered.length],
+            ["unknown", "Unknown deadlines", tenders.filter((t) => t.status === "DEADLINE_UNKNOWN").length],
             ["documents", "Document links", tenders.length],
             ["institutions", "Institutions", data?.institutions.length ?? 0],
             ["sources", "Sources & diagnostics", data?.sources.length ?? 0],
@@ -862,6 +950,9 @@ export default function Dashboard() {
               )}
             </details>
           </>
+        )}
+        {tab === "unknown" && (
+          <UnknownDeadlines tenders={tenders} data={data} clock={clock} />
         )}
         {tab === "documents" && (
           <DocumentLinks tenders={tenders} data={data} clock={clock} />
