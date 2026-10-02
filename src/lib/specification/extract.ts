@@ -10,6 +10,41 @@ type Rule = [SpecificationSection, string, RegExp];
 const rules: Rule[] = [
   [
     "technicalRequirements",
+    "Radiography and mammography",
+    /\b(?:anode|focal spot|tube current|tube voltage|kvp|mas|automatic exposure control|aec|dose area product|dap|detective quantum efficiency|dqe|pixel pitch|detector size|compression force|breast tomosynthesis|tomosynthesis|anti.scatter grid)\b/i,
+  ],
+  [
+    "technicalRequirements",
+    "C-arm and mobile imaging",
+    /\b(?:c.arm|orbital rotation|angulation|isocentric|image intensifier|flat.panel detector|pulsed fluoroscopy|mobile dr|portable dr|wireless detector)\b/i,
+  ],
+  [
+    "technicalRequirements",
+    "Infusion and syringe delivery",
+    /\b(?:infusion rate|flow rate|bolus|occlusion pressure|occlusion alarm|syringe sizes?|syringe compatibility|drug library|dose error reduction|anti.bolus|anti.free.flow|keep vein open|kvo|infusion accuracy)\b/i,
+  ],
+  [
+    "technicalRequirements",
+    "Patient and fluid warming",
+    /\b(?:patient warming|fluid warmer|blood warmer|forced.air warming|warming blankets?|warming temperature|temperature range|over.temperature|overheating|heating rate)\b/i,
+  ],
+  [
+    "technicalRequirements",
+    "Surgical illumination",
+    /\b(?:lux|illuminance|illumination intensity|colou?r rendering index|cri|light.field diameter|shadow dilution|shadowless|surgical light|ot light|sterili[sz]able handles?)\b/i,
+  ],
+  [
+    "technicalRequirements",
+    "Anaesthesia delivery",
+    /\b(?:anaesthesia machine|anesthesia machine|anaesthesia workstation|anesthesia workstation|vapou?ri[sz]er|fresh gas flow|gas mixer|low.flow anaesthesia|low.flow anesthesia|hypoxic guard|breathing system|carbon dioxide absorber|co2 absorber)\b/i,
+  ],
+  [
+    "technicalRequirements",
+    "Airway visualization",
+    /\b(?:video laryngoscope|intubation bronchoscope|insertion tube|working channel|angulation|field of view|depth of field|laryngoscope blades?)\b/i,
+  ],
+  [
+    "technicalRequirements",
     "Patient population",
     /\b(?:adult|pa?ediatric|neonatal|infant)\b/i,
   ],

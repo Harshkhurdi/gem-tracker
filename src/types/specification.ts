@@ -3,7 +3,15 @@ export type PriorityEquipment =
   | "ULTRASOUND"
   | "DEFIBRILLATORS"
   | "HOSPITAL_BEDS"
-  | "ENDOSCOPY";
+  | "ENDOSCOPY"
+  | "MAMMOGRAPHY"
+  | "DIGITAL_RADIOGRAPHY"
+  | "C_ARM"
+  | "INFUSION_PUMPS"
+  | "PATIENT_MONITORS"
+  | "PATIENT_WARMING"
+  | "OT_LIGHTS"
+  | "ANAESTHESIA";
 export type SpecificationSection =
   | "technicalRequirements"
   | "accessories"

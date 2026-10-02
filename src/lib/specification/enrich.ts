@@ -273,6 +273,39 @@ export async function inspectPriorityTender(
   raw.priorityCategories = categories;
 }
 const inspectionCursors = new Map<string, number>();
+/** Share the existing inspection cap across equipment groups and generic BOQs.
+ * A busy category must not consume every slot before another category is checked.
+ * Per-group cursors let deferred candidates receive a turn on later refreshes. */
+function selectInspectionCandidates(sourceId: string, candidates: RawTender[]): RawTender[] {
+  const groups = new Map<string, RawTender[]>();
+  for (const raw of candidates) {
+    const categories = priorityCategories(raw);
+    for (const category of categories.length ? categories : ["GENERIC"]) {
+      const group = groups.get(category) || [];
+      group.push(raw);
+      groups.set(category, group);
+    }
+  }
+  const queues = [...groups].map(([category, records]) => {
+    const key = `${sourceId}:${category}`;
+    const offset = (inspectionCursors.get(key) || 0) % records.length;
+    return { key, offset, records: [...records.slice(offset), ...records.slice(0, offset)], next: 0 };
+  });
+  const selected = new Set<RawTender>();
+  while (selected.size < 16) {
+    let added = false;
+    for (const queue of queues) {
+      while (queue.next < queue.records.length && selected.has(queue.records[queue.next])) queue.next++;
+      if (queue.next === queue.records.length) continue;
+      selected.add(queue.records[queue.next++]);
+      added = true;
+      if (selected.size === 16) break;
+    }
+    if (!added) break;
+  }
+  for (const queue of queues) inspectionCursors.set(queue.key, queue.offset + queue.next);
+  return [...selected];
+}
 export async function processPrioritySource(
   source: SourceFetchResult,
   now = Date.now(),
@@ -311,22 +344,19 @@ export async function processPrioritySource(
         Date.parse(b.publishDate || "0") - Date.parse(a.publishDate || "0"),
     );
   // More than routine metadata work, with a fixed per-source budget and concurrency.
-  const offset =
-    (inspectionCursors.get(source.sourceId) || 0) %
-    Math.max(1, candidates.length);
-  const rotated = [...candidates.slice(offset), ...candidates.slice(0, offset)];
-  const selected = rotated.slice(0, 16);
-  metrics.deferredCandidates = candidates.length - selected.length;
-  if (candidates.length > 16)
-    inspectionCursors.set(source.sourceId, offset + 16);
+  const pending = candidates.filter((raw) => !raw.specification || raw.specification.extractionStatus === "not-processed");
+  const selected = selectInspectionCandidates(source.sourceId, pending);
+  metrics.deferredCandidates = pending.length - selected.length;
   let next = 0;
   await Promise.all(
     Array.from({ length: Math.min(3, selected.length) }, async () => {
       while (next < selected.length) {
         const r = selected[next++];
         try {
-          if (!r.specification) await inspectPriorityTender(r, http);
-          metrics.inspectedCandidates++;
+          if (!r.specification || r.specification.extractionStatus === "not-processed") {
+            await inspectPriorityTender(r, http);
+            metrics.inspectedCandidates++;
+          }
         } catch {
           r.notes = [
             ...(r.notes || []),
@@ -336,7 +366,7 @@ export async function processPrioritySource(
       }
     }),
   );
-  for (const raw of rotated.slice(16))
+  for (const raw of pending.filter((raw) => !selected.includes(raw)))
     raw.specification = {
       extractionStatus: "not-processed",
       equipmentTypes: priorityCategories(raw),

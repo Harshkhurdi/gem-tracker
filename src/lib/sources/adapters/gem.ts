@@ -187,10 +187,17 @@ export function createGemAdapter(region: Region): TenderSourceAdapter {
           for (const root of roots) {
             if (!canSearch() || supplementalRequests >= 24 || selectedCount >= 6) { partial = true; break; }
             supplementalRequests++; searchRequests++;
-            const names = selectGemOrganisations(JSON.parse(await gemRequest(() => http.text(`${origin}/org-list-adv`, {
-              method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded", "X-Requested-With": "XMLHttpRequest", Referer: GEM_SEARCH_PAGE },
-              body: new URLSearchParams({ csrf_bd_gem_nk: token, ...(root.buyerState ? { buyer_state: root.buyerState } : { ministry: root.ministry }) }),
-            }))), region, !!root.buyerState);
+            let names: string[];
+            try {
+              names = selectGemOrganisations(JSON.parse(await gemRequest(() => http.text(`${origin}/org-list-adv`, {
+                method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded", "X-Requested-With": "XMLHttpRequest", Referer: GEM_SEARCH_PAGE },
+                body: new URLSearchParams({ csrf_bd_gem_nk: token, ...(root.buyerState ? { buyer_state: root.buyerState } : { ministry: root.ministry }) }),
+              }))), region, !!root.buyerState);
+            } catch {
+              partial = true;
+              notes.push(`Targeted organisation discovery for ${root.buyerState || root.ministry} was incomplete; regional records remain available and other official buyer roots are still considered.`);
+              continue;
+            }
             for (const name of names) {
               if (!canSearch() || supplementalRequests >= 24 || selectedCount >= 6) { partial = true; break; }
               selectedCount++;

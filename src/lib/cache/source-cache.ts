@@ -120,7 +120,7 @@ function reader(id: string) {
   let fn = readers.get(id);
   if (!fn) {
     // Category-aware classification needs snapshots containing official NIC metadata.
-    fn = unstable_cache(async () => perform(id), ["medical-source-v8", id], {
+    fn = unstable_cache(async () => perform(id), ["medical-source-v9", id], {
       revalidate: ttl,
       tags: ["tender-source-" + id],
     });

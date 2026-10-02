@@ -9,12 +9,12 @@ export const MEDICAL_RULES: MedicalRule[] = [
   {
     category: "ULTRASOUND",
     pattern:
-      /\b(?:pocus|ultra\s?sound|ultrasonograph\w*|usg|echo machine\w*|echocardiograph\w*|doppler|sonograph\w*)\b/i,
+      /\b(?:pocus|ultra\s?sound|ultrasonograph\w*|usg|echo machine\w*|echocardiograph\w*|doppler(?!\s+(?:radar|weather|traffic|industrial)\b)|sonograph\w*)\b/i,
   },
   {
     category: "XRAY_DR",
     pattern:
-      /\b(?:GM85(?: Fit)?|GC85|GF85|flat[ -]panel detectors?|x[ -]?rays?|digital radiograph\w*|radiography|radiographic|dr system|computed radiography)\b/i,
+      /\b(?:GM85(?: Fit)?|GC85|GF85|flat[ -]panel detectors?|(?:mobile|portable) dr(?: systems?| units?)?|x[ -]?rays?|digital radiograph\w*|radiography|radiographic|dr system|computed radiography)\b/i,
   },
   { category: "C_ARM", pattern: /\bc[ -]?arms?\b/i },
   {
@@ -25,7 +25,7 @@ export const MEDICAL_RULES: MedicalRule[] = [
   {
     category: "DIAGNOSTIC_IMAGING",
     pattern:
-      /\b(?:(?:medical|clinical|digital) fluoroscop\w*|fluoroscopy (?:machine\w*|system\w*|equipment)|mri|magnetic resonance|mammograph\w*|pet\s*[/-]?\s*ct|medical imaging)\b/i,
+      /\b(?:(?:medical|clinical|digital) fluoroscop\w*|fluoroscopy (?:machine\w*|system\w*|equipment)|mri|magnetic resonance|mammograph\w*|digital mamography|breast tomosynthesis|pet\s*[/-]?\s*ct|medical imaging)\b/i,
   },
   {
     category: "PATIENT_MONITORING",
@@ -35,7 +35,7 @@ export const MEDICAL_RULES: MedicalRule[] = [
   {
     category: "VENTILATION",
     pattern:
-      /\b(?:HAMILTON[ -](?:C6|C3|C1|T1|MR1|EM7)|ventilator\w*|mechanical ventilation|non[ -]?invasive ventilation|icu ventilation)\b/i,
+      /\b(?:HAMILTON[ -](?:C6|C3|C1|T1|MR1|EM7)|(?![^\n.;]{0,100}\b(?:hvac|industrial|exhaust|roof|building ventilation)\b)ventilator\w*|mechanical ventilation|non[ -]?invasive ventilation|icu ventilation)\b/i,
   },
   {
     category: "RESPIRATORY",
@@ -47,9 +47,17 @@ export const MEDICAL_RULES: MedicalRule[] = [
     pattern: /\b(?:(?:anaesthe\w*|anesthe\w*)\s+(?:(?:and )?euthanasia )?(?:workstations?|machines?|systems?|equipment|apparatus|vapou?ri[sz]ers?)|vapou?ri[sz]er for anaesthesia)\b/i,
   },
   {
+    category: "PATIENT_WARMING",
+    pattern: /\b(?![^\n.;]{0,100}\b(?:industrial|hvac|laboratory water bath)\b)(?:patient warming (?:systems?|devices?|units?)|(?:forced[ -]air|perioperative) (?:patient )?warming (?:systems?|devices?|units?)|(?:blood|infusion|iv|intravenous) (?:and (?:blood|fluid) )?warmers?|(?:blood (?:and|&) )?fluid warmers?)\b/i,
+  },
+  {
+    category: "OT_LIGHTS",
+    pattern: /\b(?:ot lights?|(?:operation|operating|surgical) (?:theatre |theater |room )?(?:lights?|lamps?)|shadowless (?:surgical )?(?:lights?|lamps?))\b/i,
+  },
+  {
     category: "INFUSION",
     pattern:
-      /\b(?:Flo[ -]?Skan|infusion pump\w*|syringe pump\w*|volumetric pump\w*|tci pump\w*|enteral feeding pump\w*|feeding pump\w*|infusion workstation\w*|infusion system\w*)\b/i,
+      /\b(?:Flo[ -]?Skan|infusion pump\w*|syringe pump\w*|syringe infusion pump\w*|volumetric pump\w*|tci pump\w*|enteral feeding pump\w*|feeding pump\w*|infusion workstation\w*|infusion system\w*)\b/i,
   },
   {
     category: "ENDOSCOPY",
@@ -67,7 +75,7 @@ export const MEDICAL_RULES: MedicalRule[] = [
   {
     category: "ENT_AIRWAY",
     pattern:
-      /\b(?:C[ -]MAC|laryngoscop\w*|video laryngoscop\w*|airway management|ent instrument\w*|intubation kit\w*)\b/i,
+      /\b(?:C[ -]MAC|laryngoscop\w*|video[ -]?laryngoscop\w*|airway management|ent instrument\w*|intubation kit\w*)\b/i,
   },
   {
     category: "SURGICAL_INSTRUMENTS",
@@ -103,7 +111,7 @@ export const MEDICAL_RULES: MedicalRule[] = [
   { category: "ABPM", pattern: /\b(?:abpm|ambulatory blood pressure)\b/i },
   {
     category: "DEFIBRILLATION",
-    pattern: /\b(?:defibrillator\w*|automated external defibrillation|aed)\b/i,
+    pattern: /\b(?:defibrillator\w*|automated external defibrillat(?:ion|or)\w*|aed(?=\s+(?:defibrillator|resuscitation|cardiac)\b)|aed(?=[^\n.;]{0,80}\b(?:clinical|hospital|patient|cardiac|resuscitation|defibrillator)\b)|(?:clinical|hospital|patient|cardiac|resuscitation)\b[^\n.;]{0,80}\baed)\b/i,
   },
   {
     category: "LAB_IVD",
@@ -142,4 +150,4 @@ export const MEDICAL_RULES: MedicalRule[] = [
   },
 ];
 export const NONMEDICAL_PATTERNS =
-  /\b(?:civil repair|building repair|building maintenance|building work|public works|repair and maintenance of building|whitewash|white washing|painting|plaster|flooring|tiles?|false ceiling|door repair|window repair|roof repair|waterproofing|masonry|carpentry|plumbing|sanitary work|drainage|sewer|electrical wiring|cabling|(?:diesel|power|standby|electrical) generators?|hvac|ac units?|air handling units?|fire fighting|boundary wall|electrical repair|electrical work|electrical points|electrical works|electrical cabling|electrification|rewiring|engineering works|building construction|road construction|renovation|air condition(?:er|ing)|transformer|fire doors?|hostel furniture|office tables?|computer monitors?|desktop monitors?|cctv monitors?|traffic monitoring|water pumps?|submersible pumps?|centrifugal pumps?|sewage|sewerage|water treatment|water supply|office chairs?|office furniture|office work\w*|office supplies|admission (?:notices?|forms?|applications?|results?)|examination results?|course fees|lcd (?:display|panel|monitor)|road (?:works|construction)|civil works?|dg set|diesel generator|stretcher elevators?|passenger elevators?|stretcher lifts?|passenger lifts?|elevators?|lift maintenance|elevator maintenance)\b/i;
+  /\b(?:(?:weather|traffic|industrial) doppler|industrial (?:fluid )?warmers?|(?:industrial|exhaust|roof|ceiling) ventilators?|industrial exhaust|civil repair|building repair|building maintenance|building work|public works|repair and maintenance of building|whitewash|white washing|painting|plaster|flooring|tiles?|false ceiling|door repair|window repair|roof repair|waterproofing|masonry|carpentry|plumbing|sanitary work|drainage|sewer|electrical wiring|cabling|(?:diesel|power|standby|electrical) generators?|hvac|ac units?|air handling units?|fire fighting|boundary wall|electrical repair|electrical work|electrical points|electrical works|electrical cabling|electrification|rewiring|engineering works|building construction|road construction|renovation|air condition(?:er|ing)|transformer|fire doors?|hostel furniture|office tables?|computer monitors?|desktop monitors?|cctv monitors?|traffic monitoring|water pumps?|submersible pumps?|centrifugal pumps?|sewage|sewerage|water treatment|water supply|office chairs?|office furniture|office work\w*|office supplies|admission (?:notices?|forms?|applications?|results?)|examination results?|course fees|lcd (?:display|panel|monitor)|road (?:works|construction)|civil works?|dg set|diesel generator|stretcher elevators?|passenger elevators?|stretcher lifts?|passenger lifts?|elevators?|lift maintenance|elevator maintenance)\b/i;

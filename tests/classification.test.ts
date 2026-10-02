@@ -399,3 +399,24 @@ describe("bedside use context", () => {
     expect(classifyMedical(text).categories).toContain("HOSPITAL_BEDS");
   });
 });
+
+describe("additional priority clinical equipment taxonomy", () => {
+  it.each([
+    ["Digital mammography system", "DIAGNOSTIC_IMAGING"],
+    ["Mobile DR", "XRAY_DR"],
+    ["Portable DR unit", "XRAY_DR"],
+    ["Patient warming system", "PATIENT_WARMING"],
+    ["Fluid warmer", "PATIENT_WARMING"],
+    ["Blood and fluid warmer", "PATIENT_WARMING"],
+    ["OT light", "OT_LIGHTS"],
+    ["Operating theatre lights", "OT_LIGHTS"],
+    ["Video-laryngoscope", "ENT_AIRWAY"],
+    ["Flexible intubation bronchoscope", "BRONCHOSCOPY"],
+    ["AED for cardiac resuscitation", "DEFIBRILLATION"],
+  ])("recognizes %s as %s", (title, category) => {
+    expect(classifyMedical(title).categories).toContain(category);
+  });
+  it.each(["AED", "AED currency conversion", "HVAC ventilator", "Ventilator for HVAC", "Industrial exhaust ventilator", "Office lighting", "Video surveillance monitoring", "Water pump"])("requires concrete clinical equipment scope for %s", title => {
+    expect(classifyMedical(title).isMedical).toBe(false);
+  });
+});

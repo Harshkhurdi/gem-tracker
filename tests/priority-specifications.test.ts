@@ -22,6 +22,7 @@ import {
   linkRetenders,
   inspectPriorityTender,
   latestAmendmentDeadline,
+  processPrioritySource,
 } from "../src/lib/specification/enrich";
 import {
   parseXlsx,
@@ -36,7 +37,7 @@ import type {
   ParsedDocument,
   PriorityEquipment,
 } from "../src/types/specification";
-import type { RawTender } from "../src/types/tender";
+import type { RawTender, SourceFetchResult } from "../src/types/tender";
 import Excel from "exceljs";
 
 const now = new Date("2026-10-01T12:00:00Z");
@@ -355,6 +356,51 @@ describe("safe BOQ reading", () => {
     expect(() => validateXlsx(new Uint8Array([1, 2, 3, 4, 5]))).toThrow());
 });
 describe("priority search and urgency", () => {
+  const unavailableHttp = { fetch: async () => { throw Error("Official document unavailable"); } } as unknown as SourceHttp;
+  const source = (records: RawTender[], sourceId: string): SourceFetchResult => {
+    for (const record of records) record.documents = [{ label: "Technical specification", url: "https://www.aiimsbathinda.edu.in/unavailable.pdf" }];
+    return ({
+    sourceId, sourceName: "Official institution", status: "SUCCESS", records,
+    attemptedAt: now.toISOString(), notes: [], metrics: { rawRecords: records.length, institutionMatches: 0, medicalMatches: 0, falsePositivesRejected: 0, unassignedRejected: 0, detailChecks: 0 }, durationMs: 0,
+    });
+  };
+  it("shares the fixed inspection cap with sparse equipment groups and generic BOQs", async () => {
+    const busy: RawTender[] = Array.from({ length: 30 }, (_, i) => ({ ...raw("ICU ventilator"), id: `ventilator-${i}` }));
+    const sparse = ["Colour Doppler ultrasound", "Defibrillator", "ICU beds", "Endoscopy system", "Mammography system", "Digital radiography system", "C-arm", "Infusion pump", "Multiparameter patient monitor", "Patient warming system", "OT lights", "Anaesthesia workstation"].map(raw);
+    const generic = raw("Procurement of ICU equipment");
+    const result = await processPrioritySource(source([...busy, ...sparse, generic], "fair-inspection"), now.getTime(), unavailableHttp);
+    expect(result.priorityDiscovery?.inspectedCandidates).toBe(16);
+    expect(result.priorityDiscovery?.deferredCandidates).toBe(27);
+    for (const candidate of [...sparse, generic]) expect(candidate.specification?.extractionStatus).toBe("document-unavailable");
+    expect(generic.priorityCategories).toEqual([]);
+    expect(busy.filter((candidate) => candidate.specification?.extractionStatus === "not-processed").length).toBeGreaterThan(0);
+  });
+  it("inspects previously deferred candidates on refresh without replacing already extracted data", async () => {
+    const records: RawTender[] = Array.from({ length: 32 }, (_, i) => ({ ...raw("ICU ventilator"), id: `refresh-${i}` }));
+    const input = source(records, "refresh-inspection");
+    await processPrioritySource(input, now.getTime(), unavailableHttp);
+    const firstSpecification = records[0].specification;
+    expect(records[16].specification?.extractionStatus).toBe("not-processed");
+    const refreshed = await processPrioritySource(input, now.getTime(), unavailableHttp);
+    expect(refreshed.priorityDiscovery?.inspectedCandidates).toBe(16);
+    expect(records[16].specification?.extractionStatus).toBe("document-unavailable");
+    expect(records[0].specification).toBe(firstSpecification);
+    expect(records.every((candidate) => candidate.specification?.extractionStatus !== "not-processed")).toBe(true);
+    const completed = await processPrioritySource(input, now.getTime(), unavailableHttp);
+    expect(completed.priorityDiscovery?.inspectedCandidates).toBe(0);
+    expect(completed.priorityDiscovery?.deferredCandidates).toBe(0);
+  });
+  it("does not promote old, missing or invalid deadline candidates into the inspection queue", async () => {
+    const records: RawTender[] = [
+      { ...raw("ICU ventilator"), originalClosingDate: "2025-10-15" },
+      { ...raw("ICU ventilator"), originalClosingDate: undefined, publishDate: undefined },
+      { ...raw("ICU ventilator"), originalClosingDate: undefined, publishDate: "2024-01-01" },
+      { ...raw("ICU ventilator"), originalClosingDate: "invalid date" },
+    ];
+    const result = await processPrioritySource(source(records, "inactive-inspection"), now.getTime());
+    expect(result.priorityDiscovery?.inspectedCandidates).toBe(0);
+    expect(records.every((candidate) => !candidate.specification)).toBe(true);
+  });
   it("searches actual extracted features and prioritizes tomorrow over next-month brand matches", () => {
     const a = normalizeTender(
       {

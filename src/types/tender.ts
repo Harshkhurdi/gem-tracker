@@ -22,6 +22,8 @@ export type MedicalCategory =
   | "PATIENT_MONITORING"
   | "VENTILATION"
   | "RESPIRATORY"
+  | "PATIENT_WARMING"
+  | "OT_LIGHTS"
   | "ANAESTHESIA"
   | "INFUSION"
   | "ENDOSCOPY"

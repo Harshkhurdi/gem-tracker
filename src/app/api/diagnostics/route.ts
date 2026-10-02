@@ -2,16 +2,19 @@ import { allSources } from "@/lib/cache/source-cache";
 import { assignInstitutions } from "@/lib/tender/institution-matcher";
 import { classifyMedical } from "@/lib/tender/classifier";
 import { buildDashboard } from "@/lib/tender/normalize";
+import { priorityAudit } from "@/lib/tender/priority-audit";
 export const runtime = "nodejs";
 export const maxDuration = 300;
 export async function GET() {
   const results = await allSources();
   const data = buildDashboard(results);
+  const priority = priorityAudit(data, results);
   return Response.json(
     {
       generatedAt: data.generatedAt,
       summary: data.summary,
       sources: data.sources,
+      priorityEquipment: { generatedAt: priority.generatedAt, scope: priority.scope, categories: priority.categories, coverage: priority.coverage },
       institutions: data.institutions.map((i) => {
         const sources = data.sources.filter((s) =>
           i.sourceIds.includes(s.sourceId),

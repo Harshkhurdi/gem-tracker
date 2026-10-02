@@ -285,6 +285,30 @@ describe("official GeM regional discovery", () => {
     expect(result.notes.join(' ')).toContain('24/24 supplemental requests');
   });
 
+  it("continues with the official health-ministry root when the state organisation list fails", async () => {
+    const known = doc();
+    const recovered = doc("8005979", "9857868", "ICU beds");
+    const roots: string[] = [];
+    vi.spyOn(SourceHttp.prototype, "text").mockImplementation(async (url, init) => {
+      if (url === GEM_SEARCH_PAGE) return pageHtml;
+      if (url.endsWith("/ministry-list-adv")) return JSON.stringify({ status: 200, data: { BuyerStateList: ["CHANDIGARH"], MinistryList: ["Ministry of Health and Family Welfare"] } });
+      const form = new URLSearchParams(init?.body as URLSearchParams);
+      if (url.endsWith("/org-list-adv")) {
+        roots.push(form.get("buyer_state") || form.get("ministry")!);
+        if (form.has("buyer_state")) throw Error("State organisation list unavailable");
+        return JSON.stringify([pgimer]);
+      }
+      const query = JSON.parse(form.get("payload")!);
+      return response(query.organization ? [recovered] : [known]);
+    });
+    vi.spyOn(SourceHttp.prototype, "documentText").mockImplementation(async (url) => pdf(url.endsWith("/9857868") ? recovered : known));
+    const result = await createGemAdapter("Chandigarh").fetch();
+    expect(roots).toEqual(["CHANDIGARH", "Ministry of Health and Family Welfare"]);
+    expect(result.status).toBe("PARTIAL");
+    expect(result.records.map((record) => record.tenderId)).toEqual(expect.arrayContaining([known.b_bid_number[0], recovered.b_bid_number[0]]));
+    expect(result.notes.join(" ")).toContain("3/24 supplemental requests used");
+  });
+
   it("does not add organisation traffic after exhausting the shared 400-request search limit",async()=>{
     const nonmedical=doc('7885248','9718972','Office chairs');let searches=0,lookups=0;
     vi.spyOn(SourceHttp.prototype,'text').mockImplementation(async(url,init)=>{
