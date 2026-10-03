@@ -153,7 +153,7 @@ export function priorityCategories(
     if (p.id === "OT_LIGHTS" &&
       /\bot lights?\s+(?:ups\s+)?batter(?:y|ies)\b|\b(?:ups|batter(?:y|ies)|backup)\b[^\n.;]*\b(?:for|of)\s+(?:the\s+)?ot lights?\b/i.test(raw.title)) return false;
     if (p.id === "ULTRASOUND" &&
-      /\b(?:ultrasound gel|ultrasound ups batteries|(?:fetal|foetal) doppler)\b/i.test(scope)) return false;
+      /\b(?:ultrasound gel|ultrasound ups batteries|ultrasound therapy(?: unit)?|ultrasound\s*\(?physiotherapy|(?:therapeutic|physiotherapy) ultrasound|(?:fetal|foetal) doppler)\b/i.test(scope)) return false;
     const imagingGroup = ["ULTRASOUND", "MAMMOGRAPHY", "DIGITAL_RADIOGRAPHY", "C_ARM"].includes(p.id);
     const productScope = imagingGroup ? imagingScope : p.id === "ENDOSCOPY" ? endoscopyScope : scope;
     const productMedical = imagingGroup ? imagingMedical : p.id === "ENDOSCOPY" ? endoscopyMedical : medical;

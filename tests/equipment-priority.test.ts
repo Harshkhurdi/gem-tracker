@@ -142,3 +142,8 @@ describe("laparoscopic use cases are not supplied endoscopy equipment", () => {
     expect(priorityCategories({ ...raw("Laparoscopy equipment"), documentProductScope: "Technical Specifications\nFor laparoscopic procedures" })).toContain("ENDOSCOPY");
   });
 });
+
+it.each(["Ultrasound Therapy Unit", "Ultrasound (Physiotherapy)", "Therapeutic ultrasound"])("does not promote treatment device %s to diagnostic ultrasound priority", (title) => {
+  expect(priorityCategories(raw(title))).not.toContain("ULTRASOUND");
+  expect(priorityCategories(raw("Diagnostic ultrasound with cardiac probe"))).toContain("ULTRASOUND");
+});

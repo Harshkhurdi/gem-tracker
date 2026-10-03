@@ -6,6 +6,7 @@ The tracker now searches six regions: Chandigarh, Punjab, Himachal Pradesh, Jamm
 
 - 34 source adapters include six public GeM regional searches, three new state procurement healthcare routes, national CPPP healthcare buyers and HLL's central eTender listings.
 - Public CPPP organisation pagination is followed within the ordinary session. The documented publisher route includes Tata Memorial Centre even when it is absent from the active organisation index. Login/CAPTCHA is not bypassed.
+- Physiotherapy ultrasound devices remain medical equipment but are excluded from the diagnostic ultrasound priority filter.
 - Priority equipment receives the first detail/document checks. National healthcare listings with opaque titles also receive bounded details checks before classification. New state healthcare sources allow 40 detail checks; national healthcare sources allow 64. Budget exhaustion and incomplete pages remain partial.
 - Government healthcare facilities absent from the named directory can appear through verified regional government healthcare procurement. A matching GeM PDF must establish buyer identity, ownership evidence and regional scope; protected PDFs allow only explicit regional government health departments to establish otherwise-unmapped scope.
 - National CPPP buyers require regional destination or specific verified institution evidence. New Chandigarh/Mullanpur belongs to Punjab. Ladakh is outside scope. Private, veterinary and government-aided Maharaja Agrasen Medical College listings are excluded from state healthcare discovery.
@@ -20,6 +21,6 @@ Punjab and Haryana district/subdivision identities, and selected Jammu/Kashmir a
 
 ## Validation
 
-768 tests across 34 files passed; production build and required deployment asset checks passed. Live-source and production verification results are recorded in the task's region-expansion artifacts after deployment.
+771 tests across 34 files passed; production build and required deployment asset checks passed. Live-source and production verification results are recorded in the task's region-expansion artifacts after deployment.
 
 Coverage can still be incomplete because of inaccessible institutional notices, protected PDFs, generic titles, missing official directory names, request budgets and changing public listings. A zero result is not proof that no tender exists. New tenders are discovered when their official public source updates and the source cache refreshes; no unpublished tender or guaranteed complete census is claimed.
