@@ -1,6 +1,7 @@
 import { load } from "cheerio";
 import type { RawTender, Region, TenderSourceAdapter } from "@/types/tender";
 import { institutions } from "../../config/institutions";
+import { gemSourceIds } from "../../config/regions";
 import { genericPriorityCandidate, priorityRank } from "../../config/priority-equipment";
 import { parseIndianDate } from "../../tender/dates";
 import { classifyMedical } from "../../tender/classifier";
@@ -11,7 +12,7 @@ import { runAdapter } from "../result";
 
 const origin = "https://bidplus.gem.gov.in";
 // Share a small request pool across all regions so a refresh does not burst
-// eighteen simultaneous searches against the public portal.
+// simultaneous regional searches against the public portal.
 let activeRequests = 0;
 const waitingRequests: (() => void)[] = [];
 async function gemRequest<T>(work: () => Promise<T>): Promise<T> {
@@ -79,11 +80,53 @@ function buyerField(text: string, label: string, next: string): string {
   const part = flat.split(label)[1]?.split(next)[0];
   return part?.replace(/^[ /]+|[ /]+$/g, "").trim() || "";
 }
+
+const excludedHealthBuyer = /\b(?:private|pvt|charitable|trust|veterinary|animal husbandry|animal health|horticulture)\b/i;
+const publicHealthAuthority = /\b(?:department (?:of )?health|health (?:and family welfare|department|services|systems)|medical education|national health mission|state health society|medical services corporation|directorate of (?:health|medical)|civil surgeon|chief medical officer)\b/i;
+const publicHealthFacility = /\b(?:(?:government|govt|civil|district|regional|zonal|sub divisional|sub district)\s+(?:(?:medical|dental|ayurvedic|ayush|mental|general|multi specialty|multi speciality)\s+)*hospital|(?:government|govt)\s+(?:medical|dental|ayurvedic|ayush|pharmaceutical|public health)\s+(?:college|institute)|community health cent(?:re|er)|primary health cent(?:re|er)|health sub cent(?:re|er)|ayushman arogya mandir|aam aadmi clinic|esi[cs]? (?:model )?hospital)\b/i;
+
+const normalizeRegionName = (text: string) => text.toLowerCase().replace(/&/g, " and ").replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
+function namesRegion(text: string, region: Region): boolean {
+  const value = normalizeRegionName(text);
+  // Chandigarh-area addresses can be physically in either neighbouring state.
+  if (region === "Chandigarh" && /\b(?:new chandigarh|mohali|sas nagar|sahibzada ajit singh nagar|panchkula|chandimandir|haryana|punjab)\b/i.test(value)) return false;
+  return new RegExp(`\\b${region.replace(/ /g, "\\s+")}\\b`, "i").test(value);
+}
+
+/** A state-search hit is not location/ownership evidence by itself. */
+export function isExplicitRegionalHealthDepartment(raw: RawTender): boolean {
+  const department = raw.department || "";
+  return !excludedHealthBuyer.test(department) && publicHealthAuthority.test(department) && namesRegion(department, raw.region);
+}
+
+function retainUnlistedPublicHealthBuyer(raw: RawTender, organisation: string, office: string, consignees: string, documentAuthority: string): boolean {
+  const buyer = `${organisation} ${office}`;
+  const authority = `${documentAuthority} ${raw.department || ""} ${(raw.organisationChain || []).join(" ")}`;
+  if (excludedHealthBuyer.test(`${buyer} ${authority}`)) return false;
+  const governmentAuthority = /\b(?:department (?:of )?health|health department|directorate of (?:health|medical)|director (?:of )?health|national health mission|state health society|health systems corporation|medical services corporation|civil surgeon|chief medical officer)\b/i.test(buyer);
+  const structuredHealthAuthority = publicHealthAuthority.test(authority) && /\b(?:ministry|department|directorate|government|administration)\b/i.test(authority);
+  const isHealthcare = governmentAuthority || publicHealthFacility.test(buyer) ||
+    (structuredHealthAuthority && publicHealthAuthority.test(buyer));
+  // Defence/railway procurement needs both a healthcare office and a matching
+  // government administrative authority, rather than an Army buyer alone.
+  const governmentMedicalService = /\b(?:military|army|railway|air force)\s+hospital\b/i.test(buyer) &&
+    /\b(?:ministry of defence|department of military affairs|ministry of railways|indian railways)\b/i.test(authority);
+  if (!isHealthcare && !governmentMedicalService) return false;
+  const regionalAuthority = publicHealthAuthority.test(authority) && namesRegion(authority, raw.region);
+  const regionalAddress = namesRegion(office, raw.region) || namesRegion(consignees, raw.region);
+  if (!regionalAuthority && !regionalAddress) return false;
+  raw.procurementScope = "statewide";
+  raw.buyer = [organisation, office].filter(Boolean).join(" — ").slice(0, 400);
+  raw.notes!.push("Government healthcare buyer and regional scope verified in the matching GeM document; facility is not yet individually mapped in the institution directory.");
+  return true;
+}
+
 export function enrichGemBuyer(raw: RawTender, text: string): boolean {
   const ids = text.match(/GEM\s*\/\s*20\d{2}\s*\/\s*[BR]\s*\/\s*\d+/gi)?.map((s) => s.replace(/\s/g, "").toUpperCase()) || [];
   if (!ids.includes(raw.tenderId!)) return false;
   const organisation = buyerField(text, "Organisation Name", "Office Name");
   const office = buyerField(text, "Office Name", "Contact details");
+  const documentAuthority = [buyerField(text, "Ministry/State Name", "Department Name"), buyerField(text, "Department Name", "Organisation Name")].filter(Boolean).join(" ");
   const consigneeBlocks = [...text.matchAll(/Consignees\s*\/\s*Reporting Officer and Quantity([\s\S]*?)(?=Technical Specifications|Buyer Added Bid Specific|Consignees\s*\/\s*Reporting Officer and Quantity|$)/gi)]
     .map((m) => m[1].split(/Technical Specifications|Buyer Added Bid Specific/)[0]).join(" ").replace(/\s+/g, " ");
   const buyer = `${organisation} ${office}`.replace(/\(aiims\)/gi, " ");
@@ -95,6 +138,7 @@ export function enrichGemBuyer(raw: RawTender, text: string): boolean {
   raw.location = office.slice(0, 160) || undefined;
   raw.consignees = [...new Map(matches.map((i) => [i.id, { institutionId: i.id, name: i.shortName }])).values()];
   if (raw.consignees.length === 1) raw.institutionId = raw.consignees[0].institutionId;
+  if (!raw.consignees.length) retainUnlistedPublicHealthBuyer(raw, organisation, office, consigneeBlocks, documentAuthority);
   const scope = productEvidence(text);
   if (scope) {
     raw.documentProductScope = scope.slice(0, 28000);
@@ -112,12 +156,13 @@ export function selectGemOrganisations(values: unknown, region: Region, stateSco
   const seen = new Set<string>();
   return (values as string[]).filter((name) => {
     const key = name.trim().toLowerCase();
-    if (!key || seen.has(key) || /\b(?:animal|veterinary|horticulture)\b/i.test(name)) return false;
+    if (!key || seen.has(key) || excludedHealthBuyer.test(name) || /\banimal\b/i.test(name)) return false;
     // The central root is deliberately PGIMER-only. Generic campus names or
     // short aliases (e.g. GMCH) cannot justify a nationwide organisation query.
     const monitored = stateScoped ? matchInstitutions(name, region).length > 0
       : region === "Chandigarh" && /\b(?:post graduate institute of medical education and research|pgimer)\b/i.test(name) && /\bchandigarh\b/i.test(name);
-    const regionalHealth = stateScoped && /\b(?:health (?:and family welfare|services|systems)|medical education|medical college|institute of medical scien(?:ce|ces)|university of health sciences)\b/i.test(name);
+    const regionalHealth = stateScoped && (publicHealthAuthority.test(name) || publicHealthFacility.test(name) ||
+      /\b(?:medical college|institute of medical scien(?:ce|ces)|university of health sciences)\b/i.test(name));
     if (!monitored && !regionalHealth) return false;
     seen.add(key);
     return true;
@@ -125,7 +170,9 @@ export function selectGemOrganisations(values: unknown, region: Region, stateSco
 }
 
 export function createGemAdapter(region: Region): TenderSourceAdapter {
-  const id = region === "Chandigarh" ? "gem-direct" : `gem-direct-${region === "Punjab" ? "punjab" : "himachal"}`;
+  const id = gemSourceIds[region];
+  // GeM's public state-list-adv dropdown uses an ampersand for this UT.
+  const consigneeState = region === "Jammu and Kashmir" ? "JAMMU & KASHMIR" : region;
   const adapter: TenderSourceAdapter = {
     id, name: `GeM direct / ${region}`, url: GEM_SEARCH_PAGE, regions: [region],
     institutionIds: institutions.filter((i) => i.region === region).map((i) => i.id),
@@ -148,7 +195,7 @@ export function createGemAdapter(region: Region): TenderSourceAdapter {
           searchRequests++;
           return parseGemSearchPage(JSON.parse(await gemRequest(() => http.text(`${origin}/search-bids`, {
           method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded", "X-Requested-With": "XMLHttpRequest", Referer: GEM_SEARCH_PAGE },
-          body: new URLSearchParams({ csrf_bd_gem_nk: token, payload: JSON.stringify(buyerState || ministry ? { searchType: "ministry-search", ministry, buyerState, organization, department: "", bidEndFromMin: "", bidEndToMin: "", page } : { searchType: "con", state_name_con: region, city_name_con: "", bidEndFromCon: date, bidEndToCon: date, page }) }),
+          body: new URLSearchParams({ csrf_bd_gem_nk: token, payload: JSON.stringify(buyerState || ministry ? { searchType: "ministry-search", ministry, buyerState, organization, department: "", bidEndFromMin: "", bidEndToMin: "", page } : { searchType: "con", state_name_con: consigneeState, city_name_con: "", bidEndFromCon: date, bidEndToCon: date, page }) }),
         }))));
         };
         const first = await search(1);
@@ -180,7 +227,7 @@ export function createGemAdapter(region: Region): TenderSourceAdapter {
           })));
           if (buyerList?.status !== 200 || !Array.isArray(buyerList.data?.BuyerStateList) ||
               buyerList.data.BuyerStateList.some((v) => typeof v !== "string")) throw Error("GeM buyer state list changed");
-          const state = buyerList.data.BuyerStateList.find((v) => v.toLowerCase() === region.toLowerCase());
+          const state = buyerList.data.BuyerStateList.find((v) => normalizeRegionName(v) === normalizeRegionName(region));
           const healthMinistry = region === "Chandigarh" && buyerList.data.MinistryList?.find((v) => v === "Ministry of Health and Family Welfare");
           const roots = [state && { buyerState: state, ministry: "" }, healthMinistry && { buyerState: "", ministry: healthMinistry }].filter((v): v is { buyerState: string; ministry: string } => !!v);
           let supplementalRequests = 0, selectedCount = 0, added = 0;
@@ -253,7 +300,7 @@ export function createGemAdapter(region: Region): TenderSourceAdapter {
         // at most 20 additional result pages per region.
         try {
           if (buyerList?.status !== 200 || !Array.isArray(buyerList.data?.BuyerStateList)) throw Error("GeM buyer state list unavailable");
-          const state = buyerList.data.BuyerStateList.find((s) => s.toLowerCase() === region.toLowerCase());
+          const state = buyerList.data.BuyerStateList.find((s) => normalizeRegionName(s) === normalizeRegionName(region));
           if (state) {
             const buyer = await search(1, "", state);
             const buyerIds = new Set<string>();
@@ -281,9 +328,10 @@ export function createGemAdapter(region: Region): TenderSourceAdapter {
             const text = raw.documents?.[0] && await gemRequest(() => buyerHttp.documentText(raw.documents![0].url));
             const checked = !!text && enrichGemBuyer(raw, text);
             if (!checked) { partial = true; raw.notes!.push("Buyer document could not be checked; only an explicitly regional health department can be retained without institutional attribution."); }
-            // A regional delivery address alone does not make an unrelated buyer a monitored hospital.
-            const regionalHealth = /health(?:\s*(?:and|&)\s*family welfare| department| services)|medical education/i.test(raw.department || "") && new RegExp(region, "i").test(raw.department || "");
-            if (!raw.consignees?.length && !regionalHealth) continue;
+            // With an unreadable PDF, only an explicitly regional government
+            // health department in the structured listing can establish scope.
+            const regionalHealth = !text && isExplicitRegionalHealthDepartment(raw);
+            if (!raw.consignees?.length && raw.procurementScope !== "statewide" && !regionalHealth) continue;
             if (!raw.consignees?.length) raw.procurementScope = "statewide";
             records.push(raw);
           }

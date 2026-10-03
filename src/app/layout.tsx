@@ -3,7 +3,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Medical Tender Tracker",
   description:
-    "Government medical equipment tender tracker for Punjab, Chandigarh and Himachal Pradesh.",
+    "Government medical equipment tender tracker for Punjab, Chandigarh, Himachal Pradesh, Jammu and Kashmir, Uttarakhand and Haryana.",
   icons: { icon: "/favicon.svg" },
 };
 export default function RootLayout({

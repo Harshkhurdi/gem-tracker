@@ -3,7 +3,7 @@ import { writeFile, mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { adapters } from "../src/lib/sources/registry";
 import { buildDashboard } from "../src/lib/tender/normalize";
-import { assignInstitutions } from "../src/lib/tender/institution-matcher";
+import { groupRawByInstitution } from "../src/lib/tender/institution-matcher";
 import { classifyMedical } from "../src/lib/tender/classifier";
 import { resolveStatus } from "../src/lib/tender/status";
 import { sanitizeError } from "../src/lib/sources/http";
@@ -45,6 +45,7 @@ await Promise.all(
 );
 const data = buildDashboard(results);
 const priority = priorityAudit(data, results);
+const rawByInstitution = groupRawByInstitution(results.flatMap((s) => s.records));
 const audit = {
   priorityDiscovery: priority.categories,
   generatedAt: data.generatedAt,
@@ -69,11 +70,7 @@ const audit = {
     const sources = data.sources.filter((s) =>
       institution.sourceIds.includes(s.sourceId),
     );
-    const raw = results
-      .flatMap((s) => s.records)
-      .filter((r) =>
-        assignInstitutions(r).some((i) => i.id === institution.id),
-      );
+    const raw = rawByInstitution.get(institution.id) || [];
     const tenders = data.tenders.filter(
       (t) =>
         t.institutionId === institution.id ||

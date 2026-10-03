@@ -10,6 +10,7 @@ import {
 import { SourceHttp } from "../src/lib/sources/http";
 import { normalizeTender } from "../src/lib/tender/normalize";
 import type { Region } from "../src/types/tender";
+import { gemSourceIds, regions } from "../src/lib/config/regions";
 
 const pageHtml = `<script>var token = {'csrf_bd_gem_nk':'public-session'}; var url='https://bidplus.gem.gov.in/search-bids';</script>`;
 const pgimer = "Post Graduate Institute Of Medical Education And Research Chandigarh";
@@ -39,7 +40,7 @@ function mockSearch(pages: Record<number, string | Error>, region: Region = "Cha
     const form = new URLSearchParams(init?.body as URLSearchParams);
     expect(form.get("csrf_bd_gem_nk")).toBe("public-session");
     const payload = JSON.parse(form.get("payload")!);
-    expect(payload.state_name_con).toBe(region);
+    expect(payload.state_name_con).toBe(region === "Jammu and Kashmir" ? "JAMMU & KASHMIR" : region);
     const value = pages[payload.page];
     if (!value || value instanceof Error) throw value || Error("Unexpected page");
     return value;
@@ -406,6 +407,109 @@ describe("official GeM regional discovery", () => {
     expect(result.records[0].organisation).toBe(pgimer);
     expect(result.records[0].location).toBe("Chandigarh");
     expect(result.records[0].institutionId).toBe("pgimer");
+  });
+
+  it.each(regions)("retains an unlisted public healthcare facility with document-proven %s scope", async (region) => {
+    const d = doc();
+    mockSearch({ 1: response([d]) }, region);
+    vi.spyOn(SourceHttp.prototype, "documentText").mockResolvedValue(pdf(d, "Government Community Health Centre New Facility", `New Facility, ${region}`));
+    const result = await createGemAdapter(region).fetch();
+    expect(result.records).toHaveLength(1);
+    expect(result.records[0].institutionId).toBeUndefined();
+    expect(result.records[0].procurementScope).toBe("statewide");
+    expect(result.records[0].sourceId).toBe(gemSourceIds[region]);
+    expect(result.records[0].buyer).toContain("Government Community Health Centre New Facility");
+    expect(result.records[0].notes?.join(" ")).toContain("not yet individually mapped");
+    const tender = normalizeTender(result.records[0], false, new Date(result.records[0].fetchedAt));
+    expect(tender?.region).toBe(region);
+    expect(tender?.procurementScope).toBe("statewide");
+    expect(tender?.status).toBe("ACTIVE_LIKELY");
+  });
+
+  it("uses a government healthcare consignee address for a central buyer's regional procurement", async () => {
+    const d = doc();
+    mockSearch({ 1: response([d]) }, "Punjab");
+    vi.spyOn(SourceHttp.prototype, "documentText").mockResolvedValue(pdf(d, "Directorate of Health Services", "Central Purchasing Office New Delhi", "Consignees / Reporting Officer and Quantity\nGovernment Hospital New Facility, Punjab\nBuyer Added Bid Specific"));
+    const result = await createGemAdapter("Punjab").fetch();
+    expect(result.records).toHaveLength(1);
+    expect(result.records[0].location).toBe("Central Purchasing Office New Delhi");
+    expect(result.records[0].procurementScope).toBe("statewide");
+  });
+
+  it.each([
+    ["Private Community Health Centre", "Punjab", "Department of Health and Family Welfare Punjab"],
+    ["Government Veterinary Hospital New Facility", "Punjab", "Animal Husbandry Punjab"],
+    ["Government Medical College New Facility", "New Delhi", "Department of Higher Education"],
+    ["Government College New Facility", "Punjab", "Department of Higher Education"],
+    ["Acme Health Services Foundation", "Punjab", "Department of Higher Education"],
+    ["Government Hospital New Facility", "New Chandigarh, Mohali, Punjab", "Department of Higher Education"],
+  ])("does not promote an unlisted excluded or unproven buyer: %s", async (organisation, office, department) => {
+    const d = doc();
+    d.ba_official_details_deptName = [department];
+    const region = office.startsWith("New Chandigarh") ? "Chandigarh" : "Punjab";
+    mockSearch({ 1: response([d]) }, region);
+    vi.spyOn(SourceHttp.prototype, "documentText").mockResolvedValue(pdf(d, organisation, office));
+    expect((await createGemAdapter(region).fetch()).records).toEqual([]);
+  });
+
+  it("requires a matching PDF identity even when the listing names a regional health department", async () => {
+    const d = doc();
+    d.ba_official_details_deptName = ["Department of Health and Family Welfare Punjab"];
+    mockSearch({ 1: response([d]) }, "Punjab");
+    vi.spyOn(SourceHttp.prototype, "documentText").mockResolvedValue(pdf(doc("9999999"), "Government Hospital New Facility", "Punjab"));
+    const result = await createGemAdapter("Punjab").fetch();
+    expect(result.status).toBe("PARTIAL");
+    expect(result.records).toEqual([]);
+  });
+
+  it("accepts an unlisted military healthcare office only with matching defence and region evidence", async () => {
+    const d = doc();
+    d.ba_official_details_deptName = ["Department of Military Affairs"];
+    mockSearch({ 1: response([d]) }, "Punjab");
+    vi.spyOn(SourceHttp.prototype, "documentText").mockResolvedValue(pdf(d, "Indian Army", "Military Hospital New Facility, Punjab"));
+    const result = await createGemAdapter("Punjab").fetch();
+    expect(result.records).toHaveLength(1);
+    expect(result.records[0].institutionId).toBeUndefined();
+    expect(result.records[0].procurementScope).toBe("statewide");
+  });
+
+  it("selects unlisted public clinics returned by the state organisation directory", () => {
+    expect(selectGemOrganisations(["Community Health Centre New Facility", "Primary Health Centre Another Facility", "Private Health Services", "Veterinary Government Hospital"], "Punjab", true))
+      .toEqual(["Community Health Centre New Facility", "Primary Health Centre Another Facility"]);
+  });
+
+  it("uses the official Jammu & Kashmir buyer-state value and accepts the document's ampersand spelling", async () => {
+    const d = doc();
+    const buyerStates: string[] = [];
+    vi.spyOn(SourceHttp.prototype, "text").mockImplementation(async (url, init) => {
+      if (url === GEM_SEARCH_PAGE) return pageHtml;
+      if (url.endsWith("/ministry-list-adv")) return JSON.stringify({ status: 200, data: { BuyerStateList: ["JAMMU & KASHMIR"] } });
+      if (url.endsWith("/org-list-adv")) return "[]";
+      const query = JSON.parse(new URLSearchParams(init?.body as URLSearchParams).get("payload")!);
+      if (query.buyerState) buyerStates.push(query.buyerState);
+      else expect(query.state_name_con).toBe("JAMMU & KASHMIR");
+      return response([d]);
+    });
+    vi.spyOn(SourceHttp.prototype, "documentText").mockResolvedValue(pdf(d, "Government Hospital New Facility", "New Facility, Jammu & Kashmir"));
+    const result = await createGemAdapter("Jammu and Kashmir").fetch();
+    expect(buyerStates).toEqual(["JAMMU & KASHMIR"]);
+    expect(result.records).toHaveLength(1);
+    expect(result.records[0].sourceId).toBe("gem-direct-jammu-kashmir");
+    expect(result.records[0].procurementScope).toBe("statewide");
+  });
+
+  it("checks priority equipment documents before other medical purchases", async () => {
+    const routine = doc("7885248", "9718972", "Surgical gloves");
+    const priority = doc("7885249", "9718973", "ICU ventilator");
+    mockSearch({ 1: response([routine, priority]) }, "Haryana");
+    const order: string[] = [];
+    vi.spyOn(SourceHttp.prototype, "documentText").mockImplementation(async (url) => {
+      order.push(url);
+      return pdf(url.endsWith("9718973") ? priority : routine, "Government Hospital New Facility", "New Facility Haryana");
+    });
+    const result = await createGemAdapter("Haryana").fetch();
+    expect(order[0]).toContain("9718973");
+    expect(result.records.map((r) => r.tenderId)).toContain(priority.b_bid_number[0]);
   });
 
   it("keeps bulky consignee evidence for hospital matching without rendering it as the location", () => {

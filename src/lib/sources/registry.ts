@@ -1,3 +1,4 @@
+import { regions } from "../config/regions";
 import { processPrioritySource, linkRetenders } from "../specification/enrich";
 import { createGemAdapter } from "./adapters/gem";
 import { pgimerAdapter } from "./adapters/pgimer";
@@ -6,26 +7,9 @@ import { createBilaspurAdapter } from "./adapters/bilaspur";
 import { createInstitutionAdapter } from "./adapters/institution";
 import { esicAdapter, cpppEsicAdapter } from "./adapters/esic";
 import type { TenderSourceAdapter } from "@/types/tender";
-const pb = [
-  "gmc-patiala",
-  "gmc-amritsar",
-  "ggsmch-faridkot",
-  "aims-mohali",
-  "sims-hoshiarpur",
-  "sims-kapurthala",
-  "sangrur-project",
-  "sbs-project",
-  "malerkotla-project",
-];
-const hp = [
-  "igmc-shimla",
-  "aimss-chamiana",
-  "rpgmc-tanda",
-  "slbsgmch-nerchowk",
-  "yspgmc-nahan",
-  "jlngmc-chamba",
-  "rkgmc-hamirpur",
-];
+import { institutions } from "../config/institutions";
+const pb = institutions.filter((i) => i.region === "Punjab").map((i) => i.id);
+const hp = institutions.filter((i) => i.region === "Himachal Pradesh").map((i) => i.id);
 const baseAdapters: TenderSourceAdapter[] = [
   pgimerAdapter,
   createInstitutionAdapter("aiims-bathinda"),
@@ -67,7 +51,7 @@ const baseAdapters: TenderSourceAdapter[] = [
     organisation:
       /Postgraduate Institute of Medical (?:and )?Education and Research/i,
     region: "Chandigarh",
-    institutionIds: ["pgimer", "pgi-ferozepur"],
+    institutionIds: ["pgimer", "pgi-ferozepur", "pgi-sangrur", "pgi-una"],
   }),
   createNicAdapter({
     id: "punjab-dmer",
@@ -105,7 +89,8 @@ const baseAdapters: TenderSourceAdapter[] = [
     prefix: "/nicgep/app",
     organisation: /Chandigarh Administration/i,
     region: "Chandigarh",
-    institutionIds: ["gmch"],
+    institutionIds: institutions.filter((i) => i.region === "Chandigarh").map((i) => i.id),
+    statewide: true,
   }),
   createNicAdapter({
     id: "hp-dmer",
@@ -140,9 +125,33 @@ const baseAdapters: TenderSourceAdapter[] = [
   createInstitutionAdapter("gmc-patiala"),
   createInstitutionAdapter("gmc-amritsar"),
   createInstitutionAdapter("slbsgmc"),
+  ...([
+    { id: "jk-health", name: "J&K eProcurement / government healthcare", origin: "https://jktenders.gov.in", region: "Jammu and Kashmir", organisation: /Health and Medical Education|^SKIMS$/i },
+    { id: "uk-health", name: "Uttarakhand eProcurement / government healthcare", origin: "https://uktenders.gov.in", region: "Uttarakhand", organisation: /National Health Mission|NHM|Health and Family Welfare|Medical Health|Medical College|Chandra Singh Garhwali.*Medical/i },
+    { id: "haryana-health", name: "Haryana eProcurement / government healthcare", origin: "https://etenders.hry.nic.in", region: "Haryana", organisation: /^Haryana Government$/i },
+  ] as const).map((source) => createNicAdapter({ ...source, prefix: "/nicgep/app",
+    institutionIds: institutions.filter((i) => i.region === source.region).map((i) => i.id),
+    statewide: true, healthcareOnly: true, detailLimit: 40, pageLimit: 100, budgetMs: 75000,
+  })),
+  createNicAdapter({
+    id: "cppp-regional-health",
+    publicOrganisations: ["Tata Memorial Centre"],
+    name: "CPPP / regional government healthcare",
+    origin: "https://eprocure.gov.in", prefix: "/eprocure/app",
+    organisation: /^(?:Central Medical Services Society|Directorate General (?:of )?Health Services.*|Tata Memorial Cent(?:er|re)|Central Research Institute.*|National Institute of Pharmaceutical Education.*|All India Institute of Medical Sciences(?:-| )(?:Rishikesh|Vijaypur Jammu|Jammu).*|Sher.*Kashmir.*Medical.*|Post.*Medical.*Rohtak.*)$/i,
+    region: "Punjab", institutionIds: institutions.map((i) => i.id),
+    regionalHealthcare: true, detailLimit: 64, budgetMs: 75000,
+  }),
+  createNicAdapter({
+    id: "etenders-hll", name: "Central eTender / HLL regional healthcare",
+    origin: "https://etenders.gov.in", prefix: "/eprocure/app",
+    organisation: /^HLL Lifecare Limited$/i,
+    region: "Punjab", institutionIds: institutions.map((i) => i.id),
+    regionalHealthcare: true, detailLimit: 64, budgetMs: 75000,
+  }),
   esicAdapter,
   cpppEsicAdapter,
-  ...(["Chandigarh", "Punjab", "Himachal Pradesh"] as const).map(createGemAdapter),
+  ...regions.map(createGemAdapter),
 ];
 export const adapters: TenderSourceAdapter[] = baseAdapters.map((adapter) => ({
   ...adapter,

@@ -3,7 +3,8 @@ import type {
   TenderSpecification,
   PriorityDiscoveryMetrics,
 } from "./specification";
-export type Region = "Chandigarh" | "Punjab" | "Himachal Pradesh";
+import type { Region } from "@/lib/config/regions";
+export type { Region } from "@/lib/config/regions";
 export type TenderStatus =
   | "ACTIVE_VERIFIED"
   | "ACTIVE_LIKELY"

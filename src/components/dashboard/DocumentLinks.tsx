@@ -1,4 +1,5 @@
 "use client";
+import { regions } from "@/lib/config/regions";
 import { useMemo, useState } from "react";
 import type { DashboardData, Tender } from "@/types/tender";
 import { filterAndSortTenders } from "@/lib/tender/dashboard-filter";
@@ -48,7 +49,7 @@ export default function DocumentLinks({ tenders, data, clock }: {
         <label>Document region
           <select value={region} onChange={(e) => { setRegion(e.target.value); setInstitution(""); }}>
             <option value="">All regions</option>
-            {["Chandigarh", "Punjab", "Himachal Pradesh"].map((r) => <option key={r}>{r}</option>)}
+            {regions.map((r) => <option key={r}>{r}</option>)}
           </select>
         </label>
         <label>Document institution

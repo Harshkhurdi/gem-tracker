@@ -96,12 +96,13 @@ export const esicAdapter: TenderSourceAdapter = {
 // ordinary tenders cannot establish coverage of GeM-only office notices.
 const esicCppp = createNicAdapter({
   id: "cppp-esic",
-  name: "CPPP / ESIC Ludhiana",
+  name: "CPPP / ESIC regional healthcare",
   origin: "https://eprocure.gov.in",
   prefix: "/eprocure/app",
   organisation: /^Employees State Insurance Corporation$/i,
   region: "Punjab",
-  institutionIds: ["esic-ludhiana"],
+  institutionIds: ["esic-ludhiana", "hp-esic-baddi"],
+  regionalHealthcare: true, detailLimit: 64, budgetMs: 75000,
 });
 export const cpppEsicAdapter: TenderSourceAdapter = {
   ...esicCppp,
@@ -111,7 +112,7 @@ export const cpppEsicAdapter: TenderSourceAdapter = {
       ...result,
       notes: [
         ...result.notes,
-        "Checks public CPPP ESIC organisation tenders for Ludhiana; GeM-only and ESIC office-notice coverage remain separate.",
+        "Checks public CPPP ESIC organisation tenders for the six monitored regions with delivery-region evidence; GeM-only and ESIC office-notice coverage remain separate.",
       ],
     };
   },

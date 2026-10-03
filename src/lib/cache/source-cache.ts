@@ -120,7 +120,7 @@ function reader(id: string) {
   let fn = readers.get(id);
   if (!fn) {
     // Category-aware classification needs snapshots containing official NIC metadata.
-    fn = unstable_cache(async () => perform(id), ["medical-source-v9", id], {
+    fn = unstable_cache(async () => perform(id), ["medical-source-v10", id], {
       revalidate: ttl,
       tags: ["tender-source-" + id],
     });
@@ -165,12 +165,14 @@ export function invalidateSources(): void {
 }
 export async function allSources() {
   const ids = adapters.map((a) => a.id);
+  // Start long regional searches together; GeM retains its shared request pool.
+  const pending = [...ids].sort((a, b) => Number(b.startsWith("gem-direct")) - Number(a.startsWith("gem-direct")));
   let next = 0;
   const results: SourceFetchResult[] = [];
   await Promise.all(
-    Array.from({ length: 5 }, async () => {
-      while (next < ids.length) {
-        const id = ids[next++];
+    Array.from({ length: 8 }, async () => {
+      while (next < pending.length) {
+        const id = pending[next++];
         try {
           results.push(await cachedSource(id));
         } catch {

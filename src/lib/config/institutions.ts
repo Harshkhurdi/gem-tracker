@@ -1,3 +1,5 @@
+import { gemSourceIds } from "./regions";
+import { regionalHealthcareInstitutions } from "./regional-healthcare";
 import type { Institution } from "@/types/tender";
 export const institutions: Institution[] = [
   {
@@ -84,7 +86,7 @@ export const institutions: Institution[] = [
       "Satellite Centre Ferozepur",
     ],
     institutionType: "central-government",
-    operationalStatus: "operational",
+    operationalStatus: "developing",
     sourceIds: ["cppp-pgimer", "gem-direct", "gem-direct-punjab"],
     officialUrl: "https://pgimer.edu.in",
   },
@@ -136,7 +138,6 @@ export const institutions: Institution[] = [
       "Guru Gobind Singh Medical College and Hospital",
       "GGSMCH",
       "GGSMC",
-      "BFUHS Faridkot",
     ],
     institutionType: "state-government",
     operationalStatus: "operational",
@@ -443,9 +444,10 @@ institutions.push({
   note: "Listed by Punjab DMER; operational MBBS status is not established. Kept separate from the Sangrur district PPP project.",
 });
 
+institutions.push(...regionalHealthcareInstitutions);
+
 // Direct GeM regional searches supplement each monitored institution's mirrors.
 for (const institution of institutions) {
-  const source = institution.region === "Chandigarh" ? "gem-direct"
-    : institution.region === "Punjab" ? "gem-direct-punjab" : "gem-direct-himachal";
+  const source = gemSourceIds[institution.region];
   if (!institution.sourceIds.includes(source)) institution.sourceIds.push(source);
 }

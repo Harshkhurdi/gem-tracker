@@ -1,3 +1,4 @@
+import { regions as monitoredRegions } from "../../config/regions";
 import { linkedDocuments } from "../../specification/documents";
 import { inspectPriorityTender } from "../../specification/enrich";
 import {
@@ -26,6 +27,14 @@ export interface NicConfig {
   region: Region;
   institutionIds: string[];
   statewide?: boolean;
+  /** National public buyers: only retain tenders with in-region delivery evidence. */
+  regionalHealthcare?: boolean;
+  detailLimit?: number;
+  budgetMs?: number;
+  /** Exact official names, using CPPP FAQ documented public publisher route. */
+  publicOrganisations?: string[];
+  healthcareOnly?: boolean;
+  pageLimit?: number;
 }
 const clean = (html: string) => html.replace(/<!--[\s\S]*?-->/g, "");
 const normalized = (s: string) => s.replace(/\s+/g, " ").trim();
@@ -47,7 +56,7 @@ const sessionUrl = (url: string) => {
   return u.href;
 };
 const matchingRegion = (raw: RawTender) =>
-  raw.sourceId === "cppp-pgimer" ? undefined : raw.region;
+  raw.sourceId === "cppp-pgimer" || raw.sourceId === "cppp-esic" || raw.sourceId === "cppp-regional-health" || raw.sourceId === "etenders-hll" ? undefined : raw.region;
 const textOf = (raw: RawTender) =>
   [
     raw.title,
@@ -261,13 +270,38 @@ export function parseNicCorrigendum(
     publishedDate: parseIndianDate(published || ""),
   };
 }
+export function isGovernmentHealthcareChain(raw: RawTender): boolean {
+  const chain = [raw.organisation, ...(raw.organisationChain || [])].join(" ");
+  if (/veterinary|animal husbandry|public health engineering|private|charitable|maharaja agrasen|\bpvt\b/i.test(chain)) return false;
+  return /health(?: and | & )?(?:family welfare|medical education)?|medical (?:education|college|services)|hospital|civil surgeon|chief medical officer|national health mission|aiims|skims|esic|pgims/i.test(chain) ||
+    matchInstitutions(textOf(raw), raw.region).length > 0;
+}
+export function resolveNicHealthcareRegion(raw: RawTender): Region | undefined {
+  const delivery = [raw.location, ...(raw.consignees || []).map((c) => c.name)].filter(Boolean).join(" ");
+  // An explicit outside-state destination must not inherit the buyer's headquarters.
+  if (/\b(?:new delhi|delhi|uttar pradesh|rajasthan|gujarat|chhattisgarh|maharashtra|tamil nadu|karnataka|kerala|west bengal|bihar|odisha|assam|jharkhand|madhya pradesh|telangana|andhra pradesh)\b/i.test(raw.location || "")) return undefined;
+  const regionText = raw.location || "";
+  const explicit: Region[] = [];
+  if (/\bpunjab\b/i.test(regionText) || /\b(?:new chandigarh|mullanpur)\b/i.test(regionText)) explicit.push("Punjab");
+  if (/\bhimachal(?: pradesh)?\b|\bh\.?p\.?\b/i.test(regionText)) explicit.push("Himachal Pradesh");
+  if (/\bchandigarh\b/i.test(regionText) && !/\bnew chandigarh\b/i.test(regionText)) explicit.push("Chandigarh");
+  if (/\bjammu(?:\s*(?:and|&)\s*kashmir)?\b|\bkashmir\b|\bj\s*&\s*k\b/i.test(regionText)) explicit.push("Jammu and Kashmir");
+  if (/\buttarakhand\b|\buttaranchal\b/i.test(regionText)) explicit.push("Uttarakhand");
+  if (/\bharyana\b/i.test(regionText)) explicit.push("Haryana");
+  if (/\bladakh\b/i.test(regionText)) return undefined;
+  if (explicit.length) return explicit.length === 1 ? explicit[0] : undefined;
+  const deliveryMatches = matchInstitutions(delivery);
+  const matches = deliveryMatches.length ? deliveryMatches : matchInstitutions([raw.title, raw.description, raw.organisation, ...(raw.organisationChain || [])].filter(Boolean).join(" "));
+  const regions = [...new Set(matches.map((i) => i.region))];
+  return regions.length === 1 ? regions[0] : undefined;
+}
 export function createNicAdapter(config: NicConfig): TenderSourceAdapter {
   return {
     id: config.id,
     name: config.name,
     url: config.origin,
     institutionIds: config.institutionIds,
-    regions: [config.region],
+    regions: config.regionalHealthcare ? [...monitoredRegions] : [config.region],
     async fetch() {
       const start = Date.now(),
         attemptedAt = new Date().toISOString();
@@ -285,7 +319,22 @@ export function createNicAdapter(config: NicConfig): TenderSourceAdapter {
       const result = (
         status: SourceFetchResult["status"],
         error?: string,
-      ): SourceFetchResult => ({
+      ): SourceFetchResult => {
+        if (config.regionalHealthcare) {
+          const scoped = records.flatMap((raw) => {
+            const region = resolveNicHealthcareRegion(raw);
+            if (!region) return [];
+            const consignees = (raw.consignees || []).filter((c) =>
+              matchInstitutions(c.name, region).some((i) => i.id === c.institutionId));
+            return [{ ...raw, region, consignees,
+              procurementScope: consignees.length > 1 ? "multi-institution" as const
+                : consignees.length ? "institution" as const : "statewide" as const }];
+          });
+          const omitted = records.length - scoped.length;
+          records.splice(0, records.length, ...scoped);
+          notes.push(`${omitted} national listings excluded because delivery in the monitored regions was not established.`);
+        }
+        return ({
         sourceId: config.id,
         sourceName: config.name,
         status,
@@ -298,8 +347,9 @@ export function createNicAdapter(config: NicConfig): TenderSourceAdapter {
         metrics,
         durationMs: Date.now() - start,
       });
+      };
       try {
-        const http = new SourceHttp({ budgetMs: 60000, timeoutMs: 18000 });
+        const http = new SourceHttp({ budgetMs: config.budgetMs ?? 60000, timeoutMs: 18000 });
         const endpoint = config.prefix.replace(/\/$/, "").endsWith("/app")
           ? config.prefix.replace(/\/$/, "")
           : `${config.prefix.replace(/\/$/, "")}/app`;
@@ -345,6 +395,13 @@ export function createNicAdapter(config: NicConfig): TenderSourceAdapter {
         });
         if (!/Tenders by Organisation/i.test($.root().text()))
           throw new Error("Organisation listing unavailable or challenged");
+        for (const organisation of config.publicOrganisations || []) {
+          const url = new URL(indexUrl);
+          url.searchParams.set("page", "FrontEndLatestActiveTendersOrgwise");
+          url.searchParams.set("org", organisation);
+          links.push(url.href);
+          matchingOrganisations++;
+        }
         if (!matchingOrganisations)
           throw new Error(
             "Requested organisation is absent from the official index",
@@ -355,26 +412,31 @@ export function createNicAdapter(config: NicConfig): TenderSourceAdapter {
         }
         for (const url of links.slice(0, 8)) {
           try {
-            const list = await http.text(url);
-            if (
-              !/S\.No|Tender ID|Organisation Chain/i.test(
-                cheerio.load(clean(list)).root().text(),
-              )
-            ) {
-              partial = true;
-              notes.push(
-                "Organisation response did not contain a tender listing.",
-              );
-              continue;
+            const queue = [url], visited = new Set<string>(), found: RawTender[] = [];
+            while (queue.length && visited.size < (config.pageLimit ?? 10)) {
+              const pageUrl = queue.shift()!;
+              if (visited.has(pageUrl)) continue;
+              visited.add(pageUrl);
+              const list = await http.text(pageUrl);
+              const $list = cheerio.load(clean(list));
+              if (!/S\.No|Tender ID|Organisation Chain/i.test($list.root().text()))
+                throw new Error("Organisation response did not contain a tender listing.");
+              const pageRecords = parseNicList(list, pageUrl, config, attemptedAt);
+              found.push(...pageRecords);
+              records.push(...pageRecords);
+              successfulListings++;
+              $list($list('a[href*="TablePages.linkFwd"]').length ? 'a[href*="TablePages.linkFwd"]' : 'a[href*="TablePages.linkPage"]').each((_, a) => {
+                const nextUrl = absolute($list(a).attr("href")!, pageUrl);
+                if (!visited.has(nextUrl) && !queue.includes(nextUrl)) queue.push(nextUrl);
+              });
             }
-            const found = parseNicList(list, url, config, attemptedAt);
-            successfulListings++;
-            records.push(...found);
-            if (found.length < (expectedCounts.get(url) || 0)) {
+            if (queue.some((u) => !visited.has(u))) {
               partial = true;
-              notes.push(
-                "Organisation count exceeds parsed listing rows; additional pages or a source change may remain.",
-              );
+              notes.push(`Public organisation pagination capped at ${config.pageLimit ?? 10} pages; further pages may remain.`);
+            }
+            if (new Set(found.map((r) => r.tenderId)).size < (expectedCounts.get(url) || 0)) {
+              partial = true;
+              notes.push("Organisation count exceeds parsed listing rows; additional pages or a source change may remain.");
             }
           } catch (e) {
             partial = true;
@@ -391,11 +453,16 @@ export function createNicAdapter(config: NicConfig): TenderSourceAdapter {
         ];
         records.splice(0, records.length, ...dedup);
         metrics.rawRecords = records.length;
+        if (config.healthcareOnly) {
+          const healthcare = records.filter(isGovernmentHealthcareChain);
+          notes.push(`${records.length - healthcare.length} non-healthcare public-buyer listings excluded.`);
+          records.splice(0, records.length, ...healthcare);
+        }
         const candidates = records.filter((raw) => {
           const text = textOf(raw);
           const assigned =
             matchInstitutions(text, matchingRegion(raw)).length > 0 ||
-            !!config.statewide;
+            !!config.statewide || !!config.regionalHealthcare;
           const medical =
             classifyMedical(
               [raw.title, raw.description].filter(Boolean).join("\n"),
@@ -408,14 +475,14 @@ export function createNicAdapter(config: NicConfig): TenderSourceAdapter {
           else metrics.unassignedRejected++;
           if (medical) metrics.medicalMatches++;
           else metrics.falsePositivesRejected++;
-          return assigned && medical;
+          return assigned && (medical || !!config.regionalHealthcare);
         });
         candidates.sort((a, b) => priorityRank(b) - priorityRank(a));
-        const detailLimit = 20;
+        const detailLimit = config.detailLimit ?? 20;
         if (candidates.length > detailLimit) {
           partial = true;
           notes.push(
-            `${candidates.length - detailLimit} relevant detail checks deferred by the 20-detail limit.`,
+            `${candidates.length - detailLimit} relevant detail checks deferred by the ${detailLimit}-detail limit.`,
           );
         }
         let next = 0;
@@ -488,8 +555,8 @@ export function createNicAdapter(config: NicConfig): TenderSourceAdapter {
                       ],
                     };
                   if (
-                    priorityCategories(enriched).length ||
-                    genericPriorityCandidate(enriched)
+                    !config.regionalHealthcare && (priorityCategories(enriched).length ||
+                    genericPriorityCandidate(enriched))
                   ) {
                     // Download links live on the explicitly linked full-detail page.
                     // Use this listing session rather than an unrelated later cookie jar.

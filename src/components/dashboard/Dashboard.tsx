@@ -1,4 +1,5 @@
 "use client";
+import { regions } from "@/lib/config/regions";
 import Specifications from "./Specifications";
 import DocumentLinks from "./DocumentLinks";
 import { descriptionExcerpt, displaySourceText } from "@/lib/tender/display-text";
@@ -374,7 +375,7 @@ function UnknownDeadlines({
           <label>Unknown-deadline region
             <select value={region} onChange={(e) => { setRegion(e.target.value); setInstitution(""); }}>
               <option value="">All regions</option>
-              {["Chandigarh", "Punjab", "Himachal Pradesh"].map((r) => <option key={r}>{r}</option>)}
+              {regions.map((r) => <option key={r}>{r}</option>)}
             </select>
           </label>
           <label>Unknown-deadline institution
@@ -616,7 +617,7 @@ export default function Dashboard() {
           </span>
         </Link>
         <div className="topbar-note">
-          <span className="live-dot" /> Chandigarh · Punjab · Himachal Pradesh
+          <span className="live-dot" /> {regions.join(" · ")}
         </div>
       </header>
       <main>
@@ -791,7 +792,7 @@ export default function Dashboard() {
                     }}
                   >
                     <option value="">All regions</option>
-                    {["Chandigarh", "Punjab", "Himachal Pradesh"].map((v) => (
+                    {regions.map((v) => (
                       <option key={v}>{v}</option>
                     ))}
                   </select>

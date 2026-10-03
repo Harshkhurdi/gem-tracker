@@ -1,5 +1,5 @@
 import { allSources } from "@/lib/cache/source-cache";
-import { assignInstitutions } from "@/lib/tender/institution-matcher";
+import { groupRawByInstitution } from "@/lib/tender/institution-matcher";
 import { classifyMedical } from "@/lib/tender/classifier";
 import { buildDashboard } from "@/lib/tender/normalize";
 import { priorityAudit } from "@/lib/tender/priority-audit";
@@ -9,6 +9,7 @@ export async function GET() {
   const results = await allSources();
   const data = buildDashboard(results);
   const priority = priorityAudit(data, results);
+  const rawByInstitution = groupRawByInstitution(results.flatMap((s) => s.records));
   return Response.json(
     {
       generatedAt: data.generatedAt,
@@ -19,9 +20,7 @@ export async function GET() {
         const sources = data.sources.filter((s) =>
           i.sourceIds.includes(s.sourceId),
         );
-        const raw = results
-          .flatMap((s) => s.records)
-          .filter((r) => assignInstitutions(r).some((x) => x.id === i.id));
+        const raw = rawByInstitution.get(i.id) || [];
         const medicalRaw = raw.filter(
           (r) =>
             classifyMedical(
