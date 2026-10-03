@@ -1,5 +1,6 @@
 import type { Readable } from "node:stream";
 import { EnvHttpProxyAgent, request as httpRequest } from "undici";
+import { pgimerDispatcher } from "./pgimer-tls";
 const proxy =
   process.env.HTTPS_PROXY || process.env.HTTP_PROXY
     ? new EnvHttpProxyAgent()
@@ -121,6 +122,7 @@ export class SourceHttp {
           : typeof init.body === "string"
             ? init.body
             : undefined;
+      const dispatcher = pgimerDispatcher(url, !!proxy) || proxy;
       let incoming: Awaited<ReturnType<typeof httpRequest>> | undefined;
       for (let attempt = 0; attempt < 2; attempt++) {
         try {
@@ -131,7 +133,7 @@ export class SourceHttp {
             headers: Object.fromEntries(headers.entries()),
             body,
             signal: AbortSignal.timeout(Math.min(left, this.timeout)),
-            ...(proxy ? { dispatcher: proxy } : {}),
+            ...(dispatcher ? { dispatcher } : {}),
           });
           if (
             attempt === 0 &&

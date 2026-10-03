@@ -584,7 +584,7 @@ describe("reviewed official scans", () => {
   });
 
   it("requires both exact URL and matching fresh bytes", () => {
-    const d = reviewedScans[0];
+    const d = reviewedScans.find((scan) => scan.url.includes("aiimsbathinda.edu.in"))!;
     expect(reviewedScanPages(d.url, "changed")).toBeUndefined();
     expect(
       reviewedScanPages("https://www.aiimsbathinda.edu.in/other.pdf", d.sha256),
@@ -592,7 +592,7 @@ describe("reviewed official scans", () => {
     expect(reviewedScanPages(d.url, d.sha256)?.[2].page).toBe(5);
   });
   it("marks selected reviewed excerpts partial and preserves the real warranty and CMC distinction", () => {
-    const d = reviewedScans[1];
+    const d = reviewedScans.find((scan) => scan.url.includes("aiimsbilaspur.edu.in"))!;
     const result = extractSpecifications(
       [{ ...doc(""), url: d.url, pages: d.pages, textMethod: "reviewed-scan" }],
       ["ENDOSCOPY"],
@@ -611,7 +611,7 @@ describe("reviewed official scans", () => {
     ).toBe(true);
   });
   it("retains explicitly stated cleaning-adaptor package quantity", () => {
-    const d = reviewedScans[0];
+    const d = reviewedScans.find((scan) => scan.url.includes("aiimsbathinda.edu.in"))!;
     const result = extractSpecifications(
       [{ ...doc(""), url: d.url, pages: d.pages, textMethod: "reviewed-scan" }],
       ["ENDOSCOPY"],
@@ -623,7 +623,7 @@ describe("reviewed official scans", () => {
     expect(accessory?.sourcePage).toBe(5);
   });
   it("reads visually checked labelled submission times with physical-page provenance", () => {
-    const deadlines = reviewedScans.map(
+    const deadlines = reviewedScans.filter((scan) => /aiims(?:bathinda|bilaspur)\.edu\.in/.test(scan.url)).map(
       (d) =>
         extractSubmissionDeadline(d.pages.map((p) => p.text).join("\n"))?.date,
     );

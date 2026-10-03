@@ -9,6 +9,29 @@ interface ReviewedScan {
 // These selected excerpts never establish full document or amendment coverage.
 export const reviewedScans: readonly ReviewedScan[] = [
   {
+    url: "https://pgimer.edu.in/PGIMER_PORTAL/AbstractFilePath?FileType=E&FileName=101Oct2026155814.pdf&PathKey=TENDER_PATH",
+    sha256: "5775c2a483f752b3bfb4f1c7ea7f7a370cd7da1c61b8b6e6f28c7429c2d9f2b5",
+    reviewedAt: "2026-10-03",
+    pages: [
+      { page: 1, text: "PI(EP)14053-54\nDate: 01/10/2026\nPost Graduate Institute of Medical Education & Research, Chandigarh" },
+      { page: 2, text: `E-Tender Notice No. PI(EP)/26-27/01
+Postgraduate Institute of Medical Education and Research, Chandigarh
+Sr. No | Equipment/Item Name | Quantity | EMD | Bid submission Date | Bid Opening Date | Deptt Name
+1 | QLF System | 02Nos. | Rs.1,00,000/- | 21-10-2026 | 22-10-2026 | OHSC
+2 | Dental Air Rotor Lubricating Machine | 07Nos. | Rs.70,000/- | -do- | -do- | OHSC
+3 | Transport Ventilators | 04Nos. | Rs.80,000/- | -do- | -do- | Pediatrics Medicine
+4 | Complete Shockwave Therapy System | 01No. | Rs.96,000/- | 22-10-2026 | 23-10-2026 | Physiotherapy
+5 | Indirect Colorimeter (Buy Back) | 01No. | Rs.80,000/- | -do- | -do- | Pediatrics Medicine
+6 | Lower Tract Endoscopy Set | 01No. | Rs.80,000/- | -do- | -do- | Urology
+7 | Laser Capture Micro Dissection | 01No. | Rs.4,00,000/- | 26-10-2026 | 27-10-2026 | Histopathology
+8 | Fully Automated Immunoassay : Enzyme Linked Fluorescent Assay (ELFA)/Chemiluminescence enzyme Immunoassay(CL EIA)/Electrochemiluminescence Immunoassay (ECLIA) | 01No. | Rs.3,00,000/- | -do- | -do- | Pediatrics Medicine
+9 | Lower Tract Endoscopy Set for Emg. OT | 01No. | Rs.1,58,000/- | -do- | -do- | Urology
+10 | Lower Tract Endoscopy Set for TURP, TURBT, OIU, Cystoscopy | 01 Set | Rs.1,98,000/- | -do- | -do- | Urology
+The tenders will be opened on the dates given above at 12:00 PM.
+PRE-BID CONFERENCE for ITEM Sr. No. 07 to 10 on 07.10.2026 from 02:30 P.M. onwards.` },
+    ],
+  },
+  {
     url: "https://www.aiimsbathinda.edu.in/images/procurements/20260924093801.pdf",
     sha256: "3578baf49c659394f24b62ccebfe3b47cda1ee107f491a47771d554f176d0bd6",
     reviewedAt: "2026-10-02",

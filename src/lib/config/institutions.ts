@@ -15,7 +15,7 @@ export const institutions: Institution[] = [
     ],
     institutionType: "central-government",
     operationalStatus: "operational",
-    sourceIds: ["cppp-pgimer", "gem-direct", "gem-direct-punjab"],
+    sourceIds: ["pgimer-notices", "cppp-pgimer", "gem-direct", "gem-direct-punjab"],
     officialUrl: "https://pgimer.edu.in",
   },
   {

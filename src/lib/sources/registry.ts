@@ -1,5 +1,6 @@
 import { processPrioritySource, linkRetenders } from "../specification/enrich";
 import { createGemAdapter } from "./adapters/gem";
+import { pgimerAdapter } from "./adapters/pgimer";
 import { createNicAdapter } from "./adapters/nic";
 import { createBilaspurAdapter } from "./adapters/bilaspur";
 import { createInstitutionAdapter } from "./adapters/institution";
@@ -26,6 +27,7 @@ const hp = [
   "rkgmc-hamirpur",
 ];
 const baseAdapters: TenderSourceAdapter[] = [
+  pgimerAdapter,
   createInstitutionAdapter("aiims-bathinda"),
   createInstitutionAdapter("aiims-bathinda-open"),
   createNicAdapter({

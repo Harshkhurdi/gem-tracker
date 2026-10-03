@@ -221,7 +221,7 @@ export async function parseDocument(
         ? "pdf-text"
         : "spreadsheet",
     note: reviewed
-      ? "Selected scan excerpts visually reviewed 2026-10-02; fresh official URL and SHA-256 match. Automated extraction and full attachment coverage remain incomplete."
+      ? "Selected scan excerpts visually reviewed; fresh official URL and SHA-256 match. Automated extraction and full attachment coverage remain incomplete."
       : document.note,
     pages,
     links,
