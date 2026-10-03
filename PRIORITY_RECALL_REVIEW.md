@@ -15,7 +15,9 @@ Official notice: [PGIMER institutional notice 15239](https://pgimer.edu.in/PGIME
 | 9 | Lower Tract Endoscopy Set for Emg. OT | 1 | 26 October 2026 |
 | 10 | Lower Tract Endoscopy Set for TURP, TURBT, OIU, Cystoscopy | 1 set | 26 October 2026 |
 
-These four items were absent from the previous production snapshot. Their distinct item references combine the published batch reference with the official item ordinal; no CPPP or GeM bid ID is invented. The table publishes submission dates and an opening time of noon. Noon is not assigned as a submission time: records remain day-precision, ACTIVE_LIKELY, with time unconfirmed.
+These four items were absent from the previous production snapshot. Their distinct institutional item references combine the published batch reference with the official item ordinal; no CPPP or GeM bid ID is invented. The table publishes submission dates and an opening time of noon. Institutional evidence alone stays day-precision and ACTIVE_LIKELY, with time unconfirmed.
+
+The live release check also found that CPPP published the same four items on 3 October. The two sources are reconciled only when PGIMER authority, full batch/item reference and exact normalized title agree, with a real CPPP tender ID. Different publication dates and document links are expected between this batch notice and its CPPP items. Each item is counted once and retains both source links. Fresh CPPP detail confirms the submission time as noon and takes precedence over the institutional calendar date; partial row-specific specifications remain available. The four confirmed CPPP IDs are `2026_PGIME_924588_1`, `2026_PGIME_924624_1`, `2026_PGIME_926237_1` and `2026_PGIME_926245_1`.
 
 ## Quality controls and limitations
 
@@ -29,8 +31,8 @@ These four items were absent from the previous production snapshot. Their distin
 ## Validation
 
 - Independent Astra/Sol 6.1 medium source investigations and Sol 6.1 medium final adapter review; two reproduced parser edge cases were fixed and covered by regression tests.
-- 717 tests passed across 32 files, including identity, dates, per-row evidence, cancellation/amendment safety and strict TLS behavior.
+- 729 tests passed across 33 files, including identity, dates, per-row evidence, cancellation/amendment safety, cross-source item reconciliation and strict TLS behavior.
 - Typecheck, lint, production build and deployment trace verification passed.
-- Final live source read: 104 institutional notices; four current medical/generic details checked; four priority items established; no failed detail reads. The source honestly reports PARTIAL for the older unreadable generic scan.
+- Live institutional reads returned 104 notices initially and 107 on the later check; four current medical/generic details checked; four priority items established; no failed detail reads. The source honestly reports PARTIAL for the older unreadable generic scan.
 
 Production deployment and browser/API verification are recorded in the task's release evidence after publication.

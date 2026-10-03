@@ -1,6 +1,20 @@
 import type { Tender } from "../../types/tender";
 const norm = (s?: string) => s?.toLowerCase().replace(/[^a-z0-9]/g, "") ?? "";
 const day = (s?: string) => s?.slice(0, 10) ?? "";
+function pgimerItemReference(t: Tender): string | undefined {
+  return t.referenceNumber?.trim().match(/^(?:(?:E-Tender|Global Tender Enquiry)\s+Notice\s+No\.?\s*)?(PI\(EP\)\/\d{2}-\d{2}\/(?:G\/)?\d+\/\d+)$/i)?.[1].toUpperCase();
+}
+/** A batch's issue date and its later CPPP publication date describe the same
+ * item only when its institution, complete item reference and title agree. */
+function pgimerMirrorPair(a: Tender, b: Tender): boolean {
+  const portal = a.sourceId === "cppp-pgimer" ? a : b.sourceId === "cppp-pgimer" ? b : undefined;
+  const mirror = a.sourceId === "pgimer-notices" ? a : b.sourceId === "pgimer-notices" ? b : undefined;
+  const reference = portal && pgimerItemReference(portal);
+  return !!(portal && mirror && portal !== mirror &&
+    portal.institutionId === "pgimer" && mirror.institutionId === "pgimer" &&
+    /^20\d{2}_PGIME_\d+_\d+$/i.test(portal.tenderId || "") && !mirror.tenderId &&
+    reference && reference === pgimerItemReference(mirror) && norm(portal.title) === norm(mirror.title));
+}
 function isSpecificDocumentOrDetail(url: string): boolean {
   try {
     const parsed = new URL(url);
@@ -23,6 +37,7 @@ function sameTender(a: Tender, b: Tender): boolean {
   const authorityA = norm(a.institutionId || a.organisation || a.buyer),
     authorityB = norm(b.institutionId || b.organisation || b.buyer);
   if (authorityA && authorityB && authorityA !== authorityB) return false;
+  if (pgimerMirrorPair(a, b)) return true;
   if (
     a.publishDate &&
     b.publishDate &&
@@ -72,6 +87,12 @@ function freshDirectDeadline(t: Tender, now: number): boolean {
     Number.isFinite(checked) && now - checked <= 24 * 60 * 60 * 1000 &&
     checked - now <= 5 * 60 * 1000;
 }
+function freshPgimerPortal(t: Tender, now: number): boolean {
+  const checked = Date.parse(t.checkedAt || t.fetchedAt);
+  return t.sourceId === "cppp-pgimer" && t.verification === "detail" && !t.stale &&
+    Number.isFinite(Date.parse(t.effectiveClosingDate || "")) && Number.isFinite(checked) &&
+    now - checked <= 24 * 60 * 60 * 1000 && checked - now <= 5 * 60 * 1000;
+}
 export function deduplicate(tenders: Tender[], now = new Date()): {
   tenders: Tender[];
   duplicatesRemoved: number;
@@ -97,14 +118,19 @@ export function deduplicate(tenders: Tender[], now = new Date()): {
     const directStalenessDiffers =
       (isDirectGem(tender) || isDirectGem(existing)) &&
       !!tender.stale !== !!existing.stale;
+    const pgimerPair = pgimerMirrorPair(tender, existing),
+      incomingPgimer = pgimerPair && freshPgimerPortal(tender, now.getTime()),
+      existingPgimer = pgimerPair && freshPgimerPortal(existing, now.getTime());
     const incomingWins =
       terminal(tender) !== terminal(existing)
         ? terminal(tender)
         : directStalenessDiffers
           ? !tender.stale
-          : incomingDirect !== existingDirect
-            ? incomingDirect
-            : ta > tb || (ta === tb && quality(tender) > quality(existing));
+          : incomingPgimer !== existingPgimer
+            ? incomingPgimer
+            : incomingDirect !== existingDirect
+              ? incomingDirect
+              : ta > tb || (ta === tb && quality(tender) > quality(existing));
     const best = incomingWins ? tender : existing,
       other = incomingWins ? existing : tender;
     const references = [
