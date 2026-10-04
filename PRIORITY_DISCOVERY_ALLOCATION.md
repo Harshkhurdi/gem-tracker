@@ -16,6 +16,8 @@ Scope: government healthcare across Chandigarh, Punjab, Himachal Pradesh, Jammu 
 
 Government ownership, physical destination, identity, medical product scope, deadlines, amendment checks and deduplication rules remain in force. General listing coverage may be partial, and that remains visible. Partial GeM omissions retain earlier observations for at most 24 hours, with unchanged dates and stale labels.
 
-807 tests passed across 38 files, together with type checking, lint and the production build/asset trace checks. Tests exercise queue fairness, region/category starvation, bounded rotating windows, cache expiry/eviction/failure retries, phase cancellation/session preservation and priority inspection of generic detail titles. Live source comparison and timed cold production checks are recorded in task artifacts.
+812 tests passed across 38 files, together with type checking, lint and the production build/asset trace checks. Tests exercise queue fairness, region/category starvation, bounded rotating windows, cache expiry/eviction/failure retries, phase cancellation/session preservation and priority inspection of generic detail titles. Live source comparison and timed cold production checks are recorded in task artifacts.
+
+Final browser review identified an X-ray baggage-scanner maintenance tender for a court among general medical results. Explicit security-scanner phrases no longer supply clinical X-ray/CT or portfolio evidence; separately procured medical devices remain eligible. Reprocessing the captured production dataset excluded only `2026_CHD_95366_1` and retained every other existing medical record.
 
 A quality guard excludes optical laser Doppler from ultrasound priority without excluding a separate ultrasound item in the same BOQ. Technology evidence: [Perimed laser Doppler perfusion monitoring](https://www.perimed-instruments.com/us/products/periflux-vascular-systems/periflux-6000/laser-doppler-perfusion-monitoring-ldpm/).

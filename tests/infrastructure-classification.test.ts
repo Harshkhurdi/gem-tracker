@@ -24,6 +24,24 @@ const civil: RawTender = {
 };
 
 describe("civil/infrastructure context is not medical product evidence", () => {
+  it.each([
+    "COMPREHENSIVE ANNUAL MTC. OF X-RAY BAGGAGE SCANNER AND TURNSTILE GATES WITH IP BASED CONTROLLERS INSTALLED AT PUNJAB AND HARYANA HIGH COURT, SECTOR-1, CHANDIGARH (MTC. OF EI IN NRB AT CHANDIGARH).",
+    "Supply of baggage X ray scanners to government hospital",
+    "CT luggage scanning systems for security",
+    "Samsung X-ray security screening machine",
+  ])("rejects security screening without medical or portfolio attribution: %s", title => {
+    expect(classifyMedical(title).isMedical).toBe(false);
+    expect(matchBrands(title)).toEqual([]);
+    expect(normalizeTender({...civil, title, description: title, productCategory: "Security Equipment"}, false, now)).toBeUndefined();
+  });
+
+  it("keeps independently procured medical devices beside a security scanner", () => {
+    const text = "Supply of X-ray baggage scanner and digital radiography machine";
+    expect(classifyMedical(text).categories).toContain("XRAY_DR");
+    expect(matchBrands(text)).toContainEqual(expect.objectContaining({brand: "Samsung Healthcare"}));
+    expect(classifyMedical("Supply of X-ray baggage scanner and ultrasound machine").categories).toEqual(["ULTRASOUND"]);
+  });
+
   it("rejects the confirmed tender through classification and the real dashboard pipeline", () => {
     const classification = classifyMedical(civil.description!, civil.title, civil);
     expect(classification).toMatchObject({isMedical: false, categories: [], matchedKeywords: [], confidence: 0});

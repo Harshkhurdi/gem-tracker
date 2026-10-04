@@ -7,8 +7,12 @@ const occurrences = (text: string, pattern: RegExp): string[] =>
   [...text.matchAll(new RegExp(pattern.source, "gi"))].map((m) => m[0]);
 // Clinical rooms, buyer metadata and department names describe context, not items.
 const clinicalArea = String.raw`(?:anaesthe\w*(?: (?:machine|workstation))?|anesthe\w*(?: (?:machine|workstation))?|radiology|radiography|x[ -]?ray(?: machine)?|ultrasound(?: machine)?|mri(?: machine)?|ct(?: scanner)?|endoscop\w*|laparoscop\w*|bronchoscop\w*|icu|critical care|ot|operation theatre|operating theatre|patient monitoring|monitoring|ventilator)`;
+// Security screening uses X-ray/CT too; only remove that explicitly named item,
+// preserving any separately procured clinical device in a mixed tender.
+const securityScanner = /\b(?:(?:x[ -]?ray|ct)\s+)?(?:baggage|luggage|cargo|parcel|security)\s+(?:(?:x[ -]?ray|ct)\s+)?(?:scanners?|scanning (?:systems?|machines?)|screening (?:systems?|machines?))\b/gi;
 function withoutClinicalContext(text: string): string {
   return text
+    .replace(securityScanner, " ")
     .replace(/^\s*(?:department|deptt?|location|buyer|organisation(?: chain)?|office name|hospital name)\s*:[^\n]*/gim, "")
     .replace(new RegExp(String.raw`\b(?:department|deptt?\.?)\s+(?:of{1,2}|for)\s+(?:the\s+)?${clinicalArea}\b`, "gi"), " ")
     .replace(new RegExp(String.raw`\b${clinicalArea}\s+(?:department|deptt?\.?|room|ward|block|wing|area|opd)\b`, "gi"), " ");
