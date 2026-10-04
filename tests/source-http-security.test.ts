@@ -2,9 +2,39 @@ import { Readable } from "node:stream";
 import { afterEach, describe, expect, it, vi } from "vitest";
 const request = vi.hoisted(() => vi.fn());
 vi.mock("undici", () => ({ request, Agent: class {}, EnvHttpProxyAgent: class {} }));
-import { officialDocumentRedirect, officialUrl, SourceHttp } from "@/lib/sources/http";
+import { isGemEmptySearchResponse, officialDocumentRedirect, officialUrl, SourceHttp } from "@/lib/sources/http";
 const reply = (statusCode: number, headers: Record<string, string> = {}, text = "ok") => ({ statusCode, headers, body: Readable.from([Buffer.from(text)]) });
 afterEach(() => request.mockReset());
+describe("exact GeM empty-result response", () => {
+  const empty = JSON.stringify({status: 0, code: 404, message: "No data found"});
+  it("allows the observed no-match JSON only on an opted-in official search POST", async () => {
+    request.mockResolvedValueOnce(reply(404, {}, empty));
+    expect(await new SourceHttp().text("https://bidplus.gem.gov.in/search-bids", {method:"POST", allowGemEmptyResult:true})).toBe(empty);
+  });
+  it("reads the exact empty response across chunks without broadening redirect acceptance", async () => {
+    request.mockResolvedValueOnce({statusCode:404,headers:{},body:Readable.from([Buffer.from(empty.slice(0,9)),Buffer.from(empty.slice(9))])});
+    expect(await new SourceHttp().text('https://bidplus.gem.gov.in/search-bids',{method:'POST',allowGemEmptyResult:true})).toBe(empty);
+    request.mockResolvedValueOnce(reply(302,{location:'/search-bids'})).mockResolvedValueOnce(reply(404,{},empty));
+    await expect(new SourceHttp().text('https://bidplus.gem.gov.in/search-bids',{method:'POST',allowGemEmptyResult:true})).rejects.toThrow('HTTP 404');
+    expect(request.mock.calls[2][1].method).toBe('GET');
+  });
+  it.each([
+    ["https://bidplus.gem.gov.in/search-bids", "GET", true],
+    ["https://bidplus.gem.gov.in/search-bids", "POST", false],
+    ["https://bidplus.gem.gov.in/other", "POST", true],
+    ["https://eprocure.gov.in/search-bids", "POST", true],
+  ])("keeps unrelated 404 requests failing: %s %s", async (url, method, allow) => {
+    request.mockResolvedValueOnce(reply(404, {}, empty));
+    await expect(new SourceHttp().text(url as string,{method:method as string,allowGemEmptyResult:allow as boolean})).rejects.toThrow("HTTP 404");
+  });
+  it.each(["<html>CAPTCHA</html>", '{"status":0,"code":404,"message":"Session expired"}', '{"status":0,"code":404,"message":"No data found","extra":true}', "x".repeat(513)])("rejects access challenges and changed/oversized errors", async body => {
+    request.mockResolvedValueOnce(reply(404, {}, body));
+    await expect(new SourceHttp().text("https://bidplus.gem.gov.in/search-bids",{method:"POST",allowGemEmptyResult:true})).rejects.toThrow("Invalid GeM empty-search response");
+  });
+  it.each([null, [], {status:0,code:404}, {status:"0",code:404,message:"No data found"}])("rejects ambiguous empty-result structures", value => {
+    expect(isGemEmptySearchResponse(value)).toBe(false);
+  });
+});
 describe("bounded official HTTP redirects", () => {
   it("rejects credential-bearing and nonstandard port official URLs", () => {
     expect(officialUrl("https://user:pass@hptenders.gov.in/x")).toBeUndefined();

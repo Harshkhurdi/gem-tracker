@@ -1,6 +1,7 @@
 import { clearGemBuyerDocumentCache } from "../src/lib/sources/gem-buyer-documents";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { priorityCategories } from "../src/lib/config/priority-equipment";
+import { genericPriorityCandidate, priorityCategories, priorityRank } from "../src/lib/config/priority-equipment";
+import { normalizeTender } from "../src/lib/tender/normalize";
 import { classifyMedical } from "../src/lib/tender/classifier";
 import { createNicAdapter } from "../src/lib/sources/adapters/nic";
 import { gemPriorityRegions } from "../src/lib/sources/adapters/gem";
@@ -9,6 +10,26 @@ import { SourceHttp } from "../src/lib/sources/http";
 import * as enrichment from "../src/lib/specification/enrich";
 afterEach(() => { vi.restoreAllMocks(); clearGemBuyerDocumentCache(); });
 describe("priority completeness safeguards", () => {
+  it.each(["PHSC/Proc/ERS108/2026/168", "Various Items", "CMC"])("reads PHSC opaque %s before filtering and inspects linked documents in the same session", async title => {
+    const id='2026_DHFW_123456_1';
+    const chain='Department of Health and Family Welfare||Punjab Health System Corporation||Medical Wing';
+    const inspection=vi.spyOn(enrichment,'inspectPriorityTender').mockResolvedValue();
+    const metadata=vi.spyOn(SourceHttp.prototype,'text').mockImplementation(async url=>{
+      if(url.includes('FrontEndTendersByOrganisation'))return "Tenders by Organisation<table><tr><td>1</td><td>Department of Health and Family Welfare</td><td><a href='/nicgep/app?page=list'>1</a></td></tr></table>";
+      if(url.includes('page=list'))return `S.No<table><tr><td>1</td><td>01-Oct-2026 10:00 AM</td><td>20-Oct-2027 11:00 AM</td><td>21-Oct-2027 11:00 AM</td><td><a href='/nicgep/app?page=FrontEndViewTender&amp;sp=${id}'>[${title}]</a>[ref][${id}]</td><td>${chain}</td></tr></table>`;
+      return `<table><tr><td>Tender ID</td><td>${id}</td></tr><tr><td>Organisation Chain</td><td>${chain}</td></tr><tr><td>Title</td><td>${title}</td></tr><tr><td>Product Category</td><td>Medical Equipments/Waste</td></tr><tr><td>Work Description</td><td>${title}</td></tr></table>`;
+    });
+    const result=await createNicAdapter({id:'punjab-phsc',name:'PHSC',origin:'https://eproc.punjab.gov.in',prefix:'/nicgep/app',organisation:/Department of Health and Family Welfare/,region:'Punjab',institutionIds:[],statewide:true}).fetch();
+    expect(metadata).toHaveBeenCalledTimes(3);
+    expect(result.metrics.detailChecks).toBe(1);
+    expect(inspection).toHaveBeenCalledTimes(1);
+    const raw=result.records[0];
+    expect(genericPriorityCandidate(raw)).toBe(true);
+    expect(priorityCategories(raw)).toEqual([]);
+    expect(normalizeTender(raw)?.priorityCategories || []).toEqual([]);
+    expect(priorityRank({...raw,cancelled:true})).toBe(-1);
+    expect(result.notes.join(' ')).toContain('PHSC opaque-title inspection: 1');
+  });
   it.each(["HIGH END MULTIPARA MONITOR", "Vital Sign Monitor", "Multipara Monitor with invasive blood monitoring system with transducers"])("accepts the official clinical monitor title %s", (title) => {
     expect(priorityCategories({ title })).toContain("PATIENT_MONITORS");
   });

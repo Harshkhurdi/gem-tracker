@@ -17,6 +17,7 @@ import type {
 import { parseIndianDate, dayOnly } from "@/lib/tender/dates";
 import { matchInstitutions } from "@/lib/tender/institution-matcher";
 import { classifyMedical } from "@/lib/tender/classifier";
+import { phscOpaqueCandidate } from "../../config/phsc-discovery";
 import { SourceHttp, sanitizeError, officialUrl } from "../http";
 export interface NicConfig {
   id: string;
@@ -485,6 +486,7 @@ export function createNicAdapter(config: NicConfig): TenderSourceAdapter {
         });
         candidates.sort((a, b) => priorityRank(b) - priorityRank(a));
         const currentPriorityCount = candidates.filter((r) => priorityRank(r) >= 2).length;
+        if (config.id === "punjab-phsc") notes.push(`PHSC opaque-title inspection: ${candidates.filter((raw) => phscOpaqueCandidate(raw) && priorityRank(raw) >= 2).length} current Medical Wing reference/package candidates queued for official detail and document checks; buyer names and medical portal categories alone never establish priority equipment.`);
         // A routine cap must not exclude later priority equipment. The shared
         // HTTP deadline still bounds work; incomplete metadata stays likely.
         const detailLimit = Math.min(128, Math.max(config.detailLimit ?? 20, currentPriorityCount));

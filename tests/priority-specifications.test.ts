@@ -549,6 +549,22 @@ describe("priority extraction regressions found in the live audit", () => {
     await inspectPriorityTender(civil, http);
     expect(normalizeTender(civil, false, now)).toBeUndefined();
   });
+  it.each(["PHSC/Proc/ERS108/2026/168", "Various Items", "CMC"])("promotes PHSC opaque %s only from purchased item evidence", async title => {
+    const workbook=new Excel.Workbook(), sheet=workbook.addWorksheet('BOQ');
+    sheet.addRow(['Item description','Quantity','Unit']);
+    sheet.addRow(['Portable ventilator including carrying case',2,'nos']);
+    const bytes=await workbook.xlsx.writeBuffer();
+    const http={fetch:async()=>new Response(bytes as unknown as BodyInit,{headers:{'content-type':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}})} as unknown as SourceHttp;
+    const tender:RawTender={...raw(title),institutionId:undefined,procurementScope:'statewide',sourceId:'punjab-phsc',sourceName:'PHSC',sourceUrl:'https://eproc.punjab.gov.in/nicgep/app',organisationChain:['Department of Health and Family Welfare','Punjab Health System Corporation','Medical Wing'],documents:[{label:'BOQ',url:'https://eproc.punjab.gov.in/boq.xlsx'}]};
+    expect(priorityCategories(tender)).toEqual([]);
+    await inspectPriorityTender(tender,http);
+    expect(normalizeTender(tender,false,now)?.priorityCategories).toEqual(['VENTILATORS']);
+    expect(tender.specification?.sections.quantity[0].quantity).toBe('2');
+    const protectedTender:RawTender={...tender,documentProductScope:undefined,description:undefined,specification:undefined};
+    await inspectPriorityTender(protectedTender,{fetch:async()=>new Response('<html>CAPTCHA</html>',{headers:{'content-type':'text/html'}})} as unknown as SourceHttp);
+    expect(priorityCategories(protectedTender)).toEqual([]);
+    expect(protectedTender.specification?.extractionStatus).toBe('document-unavailable');
+  });
   it("cancels a protected HTML download without enqueuing into a closed stream", async () => {
     const incoming = new PassThrough();
     const stream = sourceResponseStream(incoming);

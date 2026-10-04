@@ -5,6 +5,7 @@ import { closingDeadlineTimestamp } from "../tender/dates";
 import { productEvidence } from "../tender/product-evidence";
 import { resolveStatus } from "../tender/status";
 import { NONMEDICAL_PATTERNS } from "./medical-taxonomy";
+import { phscOpaqueCandidate } from "./phsc-discovery";
 export const PRIORITY_EQUIPMENT: {
   id: PriorityEquipment;
   label: string;
@@ -105,6 +106,7 @@ export const PRIORITY_EQUIPMENT: {
 export const GENERIC_PRIORITY_SCOPE =
   /\b(?:(?:icu|critical[ -]care|life support|medical|respiratory|radiology|diagnostic imaging|imaging|ot|surgical|gastroenterology|urology|ent|emergency|resuscitation|crash cart|minimally invasive surgery) (?:equipment|equipments|package|systems?)|(?:hospital|critical care|medical) furniture)\b/i;
 export function genericPriorityCandidate(raw: RawTender): boolean {
+  if (phscOpaqueCandidate(raw)) return true;
   return (
     (GENERIC_PRIORITY_SCOPE.test(raw.title) || /^central monitor$/i.test(raw.title.trim())) &&
     !NONMEDICAL_PATTERNS.test(raw.title) &&

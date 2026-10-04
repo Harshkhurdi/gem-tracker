@@ -5,6 +5,13 @@ const proxy =
   process.env.HTTPS_PROXY || process.env.HTTP_PROXY
     ? new EnvHttpProxyAgent()
     : undefined;
+type SourceRequestInit = RequestInit & { allowGemEmptyResult?: boolean };
+/** Observed public GeM no-match response; never treat a generic 404 as empty. */
+export function isGemEmptySearchResponse(value: unknown): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const data = value as Record<string, unknown>;
+  return Object.keys(data).length === 3 && data.status === 0 && data.code === 404 && data.message === "No data found";
+}
 const permitted = [
   ".gov.in",
   ".nic.in",
@@ -98,7 +105,7 @@ export class SourceHttp {
     this.deadline = Date.now() + (options.budgetMs ?? 60000);
     this.timeout = options.timeoutMs ?? 18000;
   }
-  async fetch(value: string, init: RequestInit = {}): Promise<Response> {
+  async fetch(value: string, init: SourceRequestInit = {}): Promise<Response> {
     let url = officialUrl(value);
     if (!url) throw Error("Unsupported official source URL");
     for (let redirect = 0; redirect < 4; redirect++) {
@@ -205,6 +212,26 @@ export class SourceHttp {
         continue;
       }
       if (!response.ok) {
+        if (response.status === 404 && init.allowGemEmptyResult &&
+            init.method?.toUpperCase() === "POST" && u.origin === "https://bidplus.gem.gov.in" && u.pathname === "/search-bids") {
+          // Read only the tiny, exact no-match JSON. HTML challenges, other
+          // error bodies and redirects remain failures, not zero tenders.
+          const reader = response.body?.getReader();
+          let text = "", length = 0;
+          if (reader) {
+            while (true) {
+              const part = await reader.read();
+              if (part.done) break;
+              length += part.value.length;
+              if (length > 512 || Date.now() > this.deadline) { await reader.cancel(); throw Error("Invalid GeM empty-search response"); }
+              text += new TextDecoder().decode(part.value);
+            }
+          }
+          let empty = false;
+          try { empty = isGemEmptySearchResponse(JSON.parse(text)); } catch { /* access challenge or changed error format */ }
+          if (empty) return new Response(text, { status: 404, headers: response.headers });
+          throw Error("Invalid GeM empty-search response");
+        }
         await response.body?.cancel();
         throw Error(`Official source HTTP ${response.status}`);
       }
@@ -212,7 +239,7 @@ export class SourceHttp {
     }
     throw Error("Too many source redirects");
   }
-  async bytes(url: string, limit = 8_000_000, init: RequestInit = {}) {
+  async bytes(url: string, limit = 8_000_000, init: SourceRequestInit = {}) {
     const response = await this.fetch(url, init);
     if (Number(response.headers.get("content-length")) > limit) {
       await response.body?.cancel();
@@ -241,7 +268,7 @@ export class SourceHttp {
     rememberDocumentBytes(url, result);
     return result;
   }
-  async text(url: string, init: RequestInit = {}) {
+  async text(url: string, init: SourceRequestInit = {}) {
     return new TextDecoder().decode(await this.bytes(url, 6_000_000, init));
   }
   async documentText(url: string): Promise<string | undefined> {

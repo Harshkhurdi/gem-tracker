@@ -7,7 +7,7 @@ import { parseIndianDate } from "../../tender/dates";
 import { classifyMedical } from "../../tender/classifier";
 import { matchInstitutions } from "../../tender/institution-matcher";
 import { productEvidence } from "../../tender/product-evidence";
-import { SourceHttp } from "../http";
+import { SourceHttp, isGemEmptySearchResponse } from "../http";
 import { runAdapter } from "../result";
 
 const origin = "https://bidplus.gem.gov.in";
@@ -30,6 +30,7 @@ export function gemListingDate(value: unknown): string | undefined {
   return parseIndianDate(date.replace(/(?:\.\d+)?Z$/, ""));
 }
 export function parseGemSearchPage(data: unknown): { total: number; start: number; docs: GemDocument[] } {
+  if (isGemEmptySearchResponse(data)) return { total: 0, start: 0, docs: [] };
   const x = data as { code?: unknown; response?: { response?: { numFound?: unknown; start?: unknown; docs?: unknown } } };
   const page = x?.response?.response;
   if (x?.code !== 200 || !page || !Number.isSafeInteger(page.numFound) || Number(page.numFound) < 0 ||
@@ -71,7 +72,7 @@ function buyerField(text: string, label: string, next: string): string {
 }
 
 const excludedHealthBuyer = /\b(?:private|pvt|charitable|trust|veterinary|animal husbandry|animal health|horticulture)\b/i;
-const publicHealthAuthority = /\b(?:department (?:of )?health|health (?:and family welfare|department|services|systems)|medical education|national health mission|state health society|medical services corporation|directorate of (?:health|medical)|civil surgeon|chief medical officer)\b/i;
+const publicHealthAuthority = /\b(?:department (?:of )?health|health (?:and family welfare|department|services|systems?)|medical education|national health mission|state health society|medical services corporation|directorate of (?:health|medical)|civil surgeon|chief medical officer)\b/i;
 const publicHealthFacility = /\b(?:(?:government|govt|civil|district|regional|zonal|sub divisional|sub district)\s+(?:(?:medical|dental|ayurvedic|ayush|mental|general|multi specialty|multi speciality)\s+)*hospital|(?:government|govt)\s+(?:medical|dental|ayurvedic|ayush|pharmaceutical|public health)\s+(?:college|institute)|community health cent(?:re|er)|primary health cent(?:re|er)|health sub cent(?:re|er)|ayushman arogya mandir|aam aadmi clinic|esi[cs]? (?:model )?hospital)\b/i;
 
 const normalizeRegionName = (text: string) => text.toLowerCase().replace(/&/g, " and ").replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
@@ -92,7 +93,7 @@ function retainUnlistedPublicHealthBuyer(raw: RawTender, organisation: string, o
   const buyer = `${organisation} ${office}`;
   const authority = `${documentAuthority} ${raw.department || ""} ${(raw.organisationChain || []).join(" ")}`;
   if (excludedHealthBuyer.test(`${buyer} ${authority}`)) return false;
-  const governmentAuthority = /\b(?:department (?:of )?health|health department|directorate of (?:health|medical)|director (?:of )?health|national health mission|state health society|health systems corporation|medical services corporation|civil surgeon|chief medical officer)\b/i.test(buyer);
+  const governmentAuthority = /\b(?:department (?:of )?health|health department|directorate of (?:health|medical)|director (?:of )?health|national health mission|state health society|health systems? corporation|medical services corporation|civil surgeon|chief medical officer)\b/i.test(buyer);
   const structuredHealthAuthority = publicHealthAuthority.test(authority) && /\b(?:ministry|department|directorate|government|administration)\b/i.test(authority);
   const isHealthcare = governmentAuthority || publicHealthFacility.test(buyer) ||
     (structuredHealthAuthority && publicHealthAuthority.test(buyer));
@@ -175,7 +176,8 @@ export function selectGemOrganisations(values: unknown, region: Region, stateSco
       : region === "Chandigarh" && /\b(?:post graduate institute of medical education and research|pgimer)\b/i.test(name) && /\bchandigarh\b/i.test(name);
     const regionalHealth = stateScoped && (publicHealthAuthority.test(name) || publicHealthFacility.test(name) ||
       /\b(?:medical college|institute of medical scien(?:ce|ces)|university of health sciences)\b/i.test(name));
-    if (!monitored && !regionalHealth) return false;
+    const phsc = stateScoped && region === "Punjab" && /^Punjab Health Systems? Corporation$/i.test(name.trim());
+    if (!monitored && !regionalHealth && !phsc) return false;
     seen.add(key);
     return true;
   }).sort((a, b) => Number(!!matchInstitutions(b, region).length) - Number(!!matchInstitutions(a, region).length));
@@ -206,7 +208,7 @@ export function createGemAdapter(region: Region): TenderSourceAdapter {
           if (!canSearch()) throw Error("GeM search request or time limit reached");
           searchRequests++;
           return parseGemSearchPage(JSON.parse(await gemRequest(() => http.text(`${origin}/search-bids`, {
-          method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded", "X-Requested-With": "XMLHttpRequest", Referer: GEM_SEARCH_PAGE },
+          method: "POST", allowGemEmptyResult: true, headers: { "Content-Type": "application/x-www-form-urlencoded", "X-Requested-With": "XMLHttpRequest", Referer: GEM_SEARCH_PAGE },
           body: new URLSearchParams({ csrf_bd_gem_nk: token, payload: JSON.stringify(buyerState || ministry ? { searchType: "ministry-search", ministry, buyerState, organization, department: "", bidEndFromMin: "", bidEndToMin: "", page } : { searchType: "con", state_name_con: consigneeState, city_name_con: "", bidEndFromCon: date, bidEndToCon: date, page }) }),
         }), priority ? "priority" : "normal")));
         };
@@ -255,7 +257,8 @@ export function createGemAdapter(region: Region): TenderSourceAdapter {
             }
             // First-page breadth across healthcare buyers precedes deeper pages.
             // The window rotates when the directory exceeds this bounded batch.
-            const pinned = names.filter((name) => publicHealthAuthority.test(name)).slice(0, 2);
+            const phsc = region === "Punjab" ? names.filter((name) => /^Punjab Health Systems? Corporation$/i.test(name.trim())) : [];
+            const pinned = [...phsc, ...names.filter((name) => publicHealthAuthority.test(name) && !phsc.includes(name))].slice(0, 2);
             const remaining = names.filter((name) => !pinned.includes(name));
             const offset = remaining.length ? Math.floor(Date.now() / 900000) % remaining.length : 0;
             const selected = [...pinned, ...remaining.slice(offset), ...remaining.slice(0, offset)].slice(0, 6 - selectedCount);

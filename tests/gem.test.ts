@@ -7,6 +7,7 @@ import {
   gemListingDate,
   gemListingRecord,
   selectGemOrganisations,
+  parseGemSearchPage,
 } from "../src/lib/sources/adapters/gem";
 import { SourceHttp } from "../src/lib/sources/http";
 import { normalizeTender } from "../src/lib/tender/normalize";
@@ -50,6 +51,66 @@ function mockSearch(pages: Record<number, string | Error>, region: Region = "Cha
 
 describe("official GeM regional discovery", () => {
   afterEach(() => { vi.restoreAllMocks(); clearGemBuyerDocumentCache(); });
+  it("recognises only the exact official no-match response", () => {
+    expect(parseGemSearchPage({status:0,code:404,message:"No data found"})).toEqual({total:0,start:0,docs:[]});
+    expect(()=>parseGemSearchPage({status:0,code:404,message:"Access denied"})).toThrow("structure changed");
+  });
+  it("retains prior pages and partial coverage when a later page returns an exact no-match", async () => {
+    const bids=Array.from({length:10},(_,i)=>doc(String(7885248+i),String(9718972+i)));
+    mockSearch({1:response(bids,11),2:JSON.stringify({status:0,code:404,message:'No data found'})});
+    vi.spyOn(SourceHttp.prototype,'documentText').mockImplementation(async url=>pdf(bids.find(d=>url.endsWith('/'+d.b_id[0]))!));
+    const result=await createGemAdapter('Chandigarh').fetch();
+    expect(result.status).toBe('PARTIAL');
+    expect(result.records).toHaveLength(10);
+    expect(result.notes.join(' ')).toContain('10 unique bids');
+  });
+  it.each([0,3,7])("always queries the returned PHSC buyer before rotating crowded authority lists: %s", async bucket => {
+    vi.spyOn(Date,'now').mockReturnValue(1791100800000 + bucket * 900000);
+    const names=[...Array.from({length:8},(_,i)=>`Health Services Authority ${i}`), 'PUNJAB HEALTH SYSTEMS CORPORATION'];
+    const queried:string[]=[];
+    vi.spyOn(SourceHttp.prototype,'text').mockImplementation(async(url,init)=>{
+      if(url===GEM_SEARCH_PAGE)return pageHtml;
+      if(url.endsWith('/ministry-list-adv'))return JSON.stringify({status:200,data:{BuyerStateList:['PUNJAB']}});
+      if(url.endsWith('/org-list-adv'))return JSON.stringify(names);
+      const q=JSON.parse(new URLSearchParams(init?.body as URLSearchParams).get('payload')!);
+      if(q.organization){queried.push(q.organization);return JSON.stringify({status:0,code:404,message:'No data found'});}
+      return response([]);
+    });
+    const result=await createGemAdapter('Punjab').fetch();
+    expect(queried[0]).toBe('PUNJAB HEALTH SYSTEMS CORPORATION');
+    expect(queried).toHaveLength(6);
+    expect(result.records).toEqual([]);
+    expect(result.notes.join(' ')).toContain('Organisation search PUNJAB HEALTH SYSTEMS CORPORATION: 0 unique bids read of 0.');
+    expect(result.notes.join(' ')).not.toContain('Organisation search PUNJAB HEALTH SYSTEMS CORPORATION could not');
+    expect(result.status).toBe('PARTIAL'); // Other returned organisations were deferred.
+  });
+  it("does not manufacture PHSC when absent from the returned directory", async () => {
+    const queried:string[]=[];
+    vi.spyOn(SourceHttp.prototype,'text').mockImplementation(async(url,init)=>{
+      if(url===GEM_SEARCH_PAGE)return pageHtml;
+      if(url.endsWith('/ministry-list-adv'))return JSON.stringify({status:200,data:{BuyerStateList:['PUNJAB']}});
+      if(url.endsWith('/org-list-adv'))return JSON.stringify(['Health Services Punjab']);
+      const q=JSON.parse(new URLSearchParams(init?.body as URLSearchParams).get('payload')!);
+      if(q.organization)queried.push(q.organization);
+      return response([]);
+    });
+    const result=await createGemAdapter('Punjab').fetch();
+    expect(queried).toEqual(['Health Services Punjab']);
+    expect(result.status).toBe('SUCCESS');
+  });
+  it("accepts either full official PHSC spelling but never an acronym-only buyer", () => {
+    expect(selectGemOrganisations(['Punjab Health System Corporation','PHSC'], 'Punjab', true)).toEqual(['Punjab Health System Corporation']);
+  });
+  it("verifies PHSC government buyer and Punjab destination in a matching document", () => {
+    const raw=gemListingRecord(doc(),'Punjab','gem-direct-punjab',new Date().toISOString());
+    const text=`Bid Number ${raw.tenderId}\nMinistry/State Name / Punjab\nDepartment Name / Health Department Punjab\nOrganisation Name / PUNJAB HEALTH SYSTEMS CORPORATION\nOffice Name / Mohali Punjab\nContact details\nItem Category\nICU ventilator\nGeMARPTS`;
+    expect(enrichGemBuyer(raw,text)).toBe(true);
+    expect(raw.procurementScope).toBe('statewide');
+    expect(normalizeTender(raw)?.priorityCategories).toContain('VENTILATORS');
+    const wrong=gemListingRecord(doc(),'Punjab','gem-direct-punjab',new Date().toISOString());
+    expect(enrichGemBuyer(wrong,text.replace(raw.tenderId!,'GEM/2026/B/9999999'))).toBe(false);
+    expect(wrong.procurementScope).toBeUndefined();
+  });
 
   it("walks every reported regional page and finds priority bids beyond page one", async () => {
     const pages = Array.from({ length: 21 }, (_, i) => doc(String(7885248 + i), String(9718972 + i)));
