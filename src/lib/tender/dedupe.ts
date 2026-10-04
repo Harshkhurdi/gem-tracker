@@ -73,16 +73,22 @@ function sameTender(a: Tender, b: Tender): boolean {
   }
   return false;
 }
+const observationTime = (t: Tender): number => {
+  const checked = Date.parse(t.checkedAt || t.fetchedAt);
+  // A malformed observation cannot outrank a known current mirror or make
+  // duplicate selection depend on which source completed first.
+  return Number.isFinite(checked) ? checked : -Infinity;
+};
 const quality = (t: Tender) =>
   (t.verification === "detail" ? 10 : 0) +
   (t.documents?.length ?? 0) +
   (t.corrigenda?.length ?? 0) +
   (t.description ? 1 : 0);
-const isDirectGem = (t: Tender) =>
-  /^gem-direct(?:-|$)/.test(t.sourceId) && /^GEM\/20\d{2}\/[BR]\/\d+$/i.test(t.tenderId || "");
-function freshDirectDeadline(t: Tender, now: number): boolean {
+const isGemIndex = (t: Tender) =>
+  (/^gem-direct(?:-|$)/.test(t.sourceId) || t.sourceId === "gem-priority-keywords") && /^GEM\/20\d{2}\/[BR]\/\d+$/i.test(t.tenderId || "");
+function freshGemIndexDeadline(t: Tender, now: number): boolean {
   const checked = Date.parse(t.checkedAt || t.fetchedAt);
-  return isDirectGem(t) && !t.stale &&
+  return isGemIndex(t) && !t.stale &&
     Number.isFinite(Date.parse(t.extendedClosingDate || "")) &&
     Number.isFinite(checked) && now - checked <= 24 * 60 * 60 * 1000 &&
     checked - now <= 5 * 60 * 1000;
@@ -106,17 +112,17 @@ export function deduplicate(tenders: Tender[], now = new Date()): {
     }
     const existing = result[index];
     // Preserve terminal notices even when another mirror recently repeats an active listing.
-    const ta = Date.parse(tender.checkedAt || tender.fetchedAt),
-      tb = Date.parse(existing.checkedAt || existing.fetchedAt);
+    const ta = observationTime(tender),
+      tb = observationTime(existing);
     const terminal = (t: Tender) =>
       t.status === "CANCELLED" || t.status === "WITHDRAWN";
     // Fetching a hospital mirror later does not make its original PDF deadline
     // newer than the portal's current index. Cached unavailable sources cannot
     // claim this authority, and cancellation/withdrawal still take precedence.
-    const incomingDirect = freshDirectDeadline(tender, now.getTime()),
-      existingDirect = freshDirectDeadline(existing, now.getTime());
+    const incomingDirect = freshGemIndexDeadline(tender, now.getTime()),
+      existingDirect = freshGemIndexDeadline(existing, now.getTime());
     const directStalenessDiffers =
-      (isDirectGem(tender) || isDirectGem(existing)) &&
+      (isGemIndex(tender) || isGemIndex(existing)) &&
       !!tender.stale !== !!existing.stale;
     const pgimerPair = pgimerMirrorPair(tender, existing),
       incomingPgimer = pgimerPair && freshPgimerPortal(tender, now.getTime()),

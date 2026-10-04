@@ -119,8 +119,8 @@ async function perform(id: string): Promise<SourceFetchResult> {
 function reader(id: string) {
   let fn = readers.get(id);
   if (!fn) {
-    // Category-aware classification needs snapshots containing official NIC metadata.
-    fn = unstable_cache(async () => perform(id), ["medical-source-v13", id], {
+    // Rebuild snapshots with device-context extraction and current GeM deadline precedence.
+    fn = unstable_cache(async () => perform(id), ["medical-source-v14", id], {
       revalidate: ttl,
       tags: ["tender-source-" + id],
     });
@@ -132,10 +132,11 @@ export async function cachedSource(id: string): Promise<SourceFetchResult> {
   try {
     const result = await reader(id)();
     remember(result);
+    const observedAt = Date.parse(result.successfulAt || result.attemptedAt);
+    const age = Date.now() - observedAt;
     const stale =
-      !!result.stale ||
-      Date.now() - Date.parse(result.successfulAt || result.attemptedAt) >
-        ttl * 1000;
+      !!result.stale || !Number.isFinite(observedAt) ||
+      age < -5 * 60 * 1000 || age > ttl * 1000;
     return {
       ...result,
       stale,

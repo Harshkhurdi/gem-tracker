@@ -64,6 +64,9 @@ export async function inspectPriorityTender(
   raw: RawTender,
   http: SourceHttp,
 ): Promise<void> {
+  // Both regional and keyword GeM adapters use the current search index.
+  // Original bid/amendment PDFs can contain older dates than that index.
+  const currentGemListing = raw.sourceId.startsWith("gem-direct") || raw.sourceId === "gem-priority-keywords";
   const generic = genericPriorityCandidate(raw);
   let categories = priorityCategories(raw);
   const found = new Map<string, SpecificationDocument>();
@@ -214,7 +217,7 @@ export async function inspectPriorityTender(
   raw.specification = extractSpecifications(documents, categories);
   // Apply only labelled submission fields, with amendment precedence and identity guard.
   const deadline = latestAmendmentDeadline(documents);
-  if (deadline && !raw.sourceId.startsWith("gem-direct")) {
+  if (deadline && !currentGemListing) {
     if (!raw.publishDate || Date.parse(deadline.date) >= Date.parse(raw.publishDate)) {
       raw.extendedClosingDate = deadline.date;
       raw.datePrecision = deadline.datePrecision;
@@ -244,7 +247,7 @@ export async function inspectPriorityTender(
       ];
     }
   }
-  if (!raw.originalClosingDate && !raw.extendedClosingDate && !raw.sourceId.startsWith("gem-direct")) {
+  if (!raw.originalClosingDate && !raw.extendedClosingDate && !currentGemListing) {
     const deadlines = documents
       .filter((d) => d.status === "parsed" && d.type !== "corrigendum")
       .map((d) =>

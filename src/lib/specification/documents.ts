@@ -128,8 +128,10 @@ export async function parseXlsx(bytes: Uint8Array): Promise<DocumentPage[]> {
   const Excel = await import("exceljs");
   const workbook = new Excel.Workbook();
   await workbook.xlsx.load(Buffer.from(bytes) as never);
+  if (workbook.worksheets.length > 12)
+    throw Error("Workbook exceeds the 12-sheet inspection limit");
   const pages: DocumentPage[] = [];
-  for (const sheet of workbook.worksheets.slice(0, 12)) {
+  for (const sheet of workbook.worksheets) {
     if (sheet.rowCount > 5000 || sheet.columnCount > 100)
       throw Error("BOQ row or column limit exceeded");
     let columnLabels: Record<number, string> = {};

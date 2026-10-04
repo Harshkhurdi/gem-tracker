@@ -37,6 +37,27 @@ const revision = {
 
 describe("cross-source evidence preservation", () => {
   it.each([false, true])(
+    "prefers valid current evidence over an invalid observation (reverse=%s)",
+    (reverse) => {
+      const malformed = tender({
+        fetchedAt: "invalid", checkedAt: "invalid",
+        status: "DEADLINE_UNKNOWN", documents: [original],
+      });
+      const current = tender({
+        sourceId: "mirror", verification: "detail", status: "ACTIVE_VERIFIED",
+        effectiveClosingDate: "2026-10-05T15:00:00+05:30",
+        documents: [revision],
+      });
+      const result = deduplicate(reverse ? [current, malformed] : [malformed, current]);
+      expect(result.duplicatesRemoved).toBe(1);
+      expect(result.tenders[0]).toMatchObject({
+        sourceId: "mirror", status: "ACTIVE_VERIFIED",
+        effectiveClosingDate: "2026-10-05T15:00:00+05:30",
+        documents: [revision, original],
+      });
+    },
+  );
+  it.each([false, true])(
     "retains older evidence and the fresh row's deadline (reverse=%s)",
     (reverse) => {
       const older = tender({

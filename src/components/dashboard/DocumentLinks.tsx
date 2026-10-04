@@ -17,14 +17,14 @@ export default function DocumentLinks({ tenders, data, clock }: {
   const [query, setQuery] = useState("");
   const [region, setRegion] = useState("");
   const [institution, setInstitution] = useState("");
-  const [status, setStatus] = useState("active");
+  const [status, setStatus] = useState("all");
   const rows = useMemo(() => filterAndSortTenders(
     tenders.filter((t) => matchesDocumentView(t, view)),
     { query, region, institution, status, scope: "", category: "", brand: "",
       source: "", closing: "", explicit: false, sort: "closing", prioritize: false }, clock,
   ), [tenders, view, query, region, institution, status, clock]);
   function reset() {
-    setView("all"); setQuery(""); setRegion(""); setInstitution(""); setStatus("active");
+    setView("all"); setQuery(""); setRegion(""); setInstitution(""); setStatus("all");
   }
   return <section aria-label="Document links view">
     <div className="filter-panel">
@@ -75,7 +75,7 @@ export default function DocumentLinks({ tenders, data, clock }: {
     <div className="results-panel">
       <div className="section-heading"><div>
         <h2>Tenders & document links <span className="count-pill">{rows.length}</span></h2>
-        <p>From the latest tracker results. Missing or unparsed PDFs do not hide a tender.</p>
+        <p>{rows.length} matching tenders of {tenders.length} total tracked records. Missing or unparsed PDFs do not hide a tender.</p>
       </div></div>
       {!rows.length ? <p className="empty-state">No tenders match these document filters.</p> :
         <div className="table-scroll"><table className="tender-table">
@@ -85,6 +85,7 @@ export default function DocumentLinks({ tenders, data, clock }: {
               <strong className="tender-title">{t.title}</strong>
               <div className="record-meta">{gemBidNumber(t) || t.tenderId || t.referenceNumber || "Reference not provided"}</div>
               <div className="record-meta">{t.status.toLowerCase().replaceAll("_", " ")}</div>
+              {t.stale && <span className="stale-label">Cached · stale observation; verify current availability</span>}
             </td>
             <td data-label="Institution / deadline">
               <strong>{t.institutionName || displaySourceText(t.organisation) || "Statewide / unassigned buyer"}</strong>

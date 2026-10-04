@@ -63,7 +63,7 @@ const rules: Rule[] = [
   [
     "technicalRequirements",
     "Ventilation parameters",
-    /\b(?:tidal volume|respiratory rate|peep|fio2|i:e ratio|inspiratory (?:time|pressure)|trigger sensitivity|minute volume)\b/i,
+    /\b(?:tidal volume|respiratory rate|peep|fio2|i:e ratio|inspiratory (?:time|pressure|flow(?: rate)?)|trigger sensitivity|minute volume)\b/i,
   ],
   [
     "technicalRequirements",
@@ -195,6 +195,16 @@ function documentLines(text: string): string[] {
   return text.replace(/\r/g, "").split("\n")
     .map((line) => line.replace(/\s+/g, " ").trim()).filter(Boolean);
 }
+// Flow and occlusion are also respiratory parameters. A shared word alone
+// must not imply that a ventilator requirement belongs to an infusion pump.
+function resolvedTechnicalField(field: string, text: string, equipmentTypes: PriorityEquipment[]): string {
+  if (field !== "Infusion and syringe delivery") return field;
+  const explicitInfusion = /\b(?:infusion|syringe|drug library|dose error reduction|anti.bolus|anti.free.flow|keep vein open|kvo)\b/i.test(text);
+  if (explicitInfusion) return field;
+  if (/\b(?:inspiratory|expiratory|respiratory|airway|ventilat\w*)\b/i.test(text)) return "Ventilation parameters";
+  return equipmentTypes.includes("INFUSION_PUMPS") ? field : "Flow and pressure";
+}
+
 function clauseText(lines: string[], index: number): string {
   const line = lines[index];
   const next = lines[index + 1];
@@ -234,7 +244,7 @@ export function extractSpecifications(
         if (!amendmentWording.test(text)) continue;
         for (const [section, field, pattern] of rules) {
           if (!pattern.test(text)) continue;
-          const resolvedField = section === "accessories" ? pattern.exec(text)?.[0] || field : field;
+          const resolvedField = section === "accessories" ? pattern.exec(text)?.[0] || field : resolvedTechnicalField(field, text, equipmentTypes);
           const key = `${section}:${resolvedField.toLowerCase()}:${clauseSubject(text)}`;
           const peers = amendments.get(key) || new Map<ParsedDocument, { date: number; requirements: Set<string> }>();
           const peer = peers.get(doc) || { date: Date.parse(doc.publishedDate || ""), requirements: new Set<string>() };
@@ -296,8 +306,13 @@ export function extractSpecifications(
           continue;
         // Preserve adjacent wrapped values but never pull an unrelated section heading.
         const text = clauseText(lines, i);
+        const matchedFields = new Set<string>();
         for (const [section, field, pattern] of rules) {
           if (!pattern.test(text)) continue;
+          const resolvedField = section === "accessories" ? pattern.exec(text)?.[0] || field : resolvedTechnicalField(field, text, equipmentTypes);
+          const matchedKey = `${section}:${resolvedField}`;
+          if (matchedFields.has(matchedKey)) continue;
+          matchedFields.add(matchedKey);
           // Post-warranty maintenance and uptime guarantees are CMC terms,
           // not the equipment warranty. Preserve genuinely mixed clauses.
           if (
@@ -311,10 +326,7 @@ export function extractSpecifications(
           )
             continue;
           const item: SpecificationItem = {
-            field:
-              section === "accessories"
-                ? pattern.exec(text)?.[0] || field
-                : field,
+            field: resolvedField,
             requirement: text.slice(0, 1600),
             mandatory: /\b(?:optional|not required|not mandatory)\b/i.test(text)
               ? false

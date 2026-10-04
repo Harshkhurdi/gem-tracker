@@ -117,6 +117,22 @@ function finishInvalidationRequest() {
 }
 
 describe("Official source cache", () => {
+  it.each(["invalid", "2026-10-01T10:00:00Z"])(
+    "does not claim a fresh source snapshot with invalid or future success time %s",
+    async (successfulAt) => {
+      mocks.fetch.mockResolvedValue({...result("SUCCESS", "Patient monitor"), successfulAt});
+      const {cachedSource} = await import("@/lib/cache/source-cache");
+      const snapshot = await cachedSource("test-source");
+      expect(snapshot).toMatchObject({status: "PARTIAL", stale: true});
+      expect(snapshot.records).toHaveLength(1);
+      expect(snapshot.notes.join(" ")).toContain("Previously checked records");
+    },
+  );
+  it("marks malformed attempted timestamps stale when no successful timestamp exists", async () => {
+    mocks.fetch.mockResolvedValue({...result("PARTIAL"), successfulAt: undefined, attemptedAt: "invalid"});
+    const {cachedSource} = await import("@/lib/cache/source-cache");
+    expect(await cachedSource("test-source")).toMatchObject({status: "PARTIAL", stale: true});
+  });
   it("does not publish arbitrary exception messages from adapters", async () => {
     mocks.fetch.mockRejectedValue(
       new Error("private-token-value in upstream config"),

@@ -695,12 +695,12 @@ export default function Dashboard() {
         </div>
         <nav className="tabs" aria-label="Dashboard views" style={{ overflowX: "auto" }}>
           {[
-            ["opportunities", "Opportunities", filtered.length],
-            ["unknown", "Unknown deadlines", tenders.filter((t) => t.status === "DEADLINE_UNKNOWN").length],
-            ["documents", "Document links", tenders.length],
+            ["opportunities", "Opportunities", filtered.length, "shown"],
+            ["unknown", "Unknown deadlines", tenders.filter((t) => t.status === "DEADLINE_UNKNOWN").length, "total"],
+            ["documents", "Document links", tenders.length, "total"],
             ["institutions", "Institutions", data?.institutions.length ?? 0],
             ["sources", "Sources & diagnostics", data?.sources.length ?? 0],
-          ].map(([id, name, count]) => (
+          ].map(([id, name, count, countScope]) => (
             <button
               key={id}
               aria-current={tab === id ? "page" : undefined}
@@ -708,7 +708,7 @@ export default function Dashboard() {
               onClick={() => setTab(String(id))}
             >
               {name}
-              <span>{count}</span>
+              <span>{count}{countScope ? ` ${countScope}` : ""}</span>
             </button>
           ))}
         </nav>
