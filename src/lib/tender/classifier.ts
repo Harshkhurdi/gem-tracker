@@ -77,6 +77,15 @@ export function classifyMedical(
       keywords.push(...matches);
     }
   }
+  // A generic central monitor can be an IT display. Require the official
+  // medical product category or explicit patient parameters before attribution.
+  if (/\bcentral monitors?\b/i.test(scopeText) &&
+    (/^Medical Equipments\/Waste$/i.test(official.productCategory || "") ||
+      /\b(?:patient|bedside|icu|ecg|nibp|spo2|vital signs?)\b/i.test(scopeText)) &&
+    !/\b(?:computer|network|cctv|security|industrial|water quality)\b/i.test(scopeText)) {
+    if (!categories.includes("PATIENT_MONITORING")) categories.push("PATIENT_MONITORING");
+    keywords.push("central monitor");
+  }
   // A strong nonmedical scope must not become medical through a buyer's name or boilerplate.
   const excluded = hasNonmedicalScope(text, scopeText, official);
   const matchedKeywords = [...new Set(keywords.map((k) => k.toLowerCase()))];

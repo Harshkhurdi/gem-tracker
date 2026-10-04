@@ -1,7 +1,7 @@
 import { load } from "cheerio";
 import type { RawTender, Region, TenderSourceAdapter } from "@/types/tender";
 import { institutions } from "../../config/institutions";
-import { gemSourceIds } from "../../config/regions";
+import { regions, gemSourceIds } from "../../config/regions";
 import { genericPriorityCandidate, priorityRank } from "../../config/priority-equipment";
 import { parseIndianDate } from "../../tender/dates";
 import { classifyMedical } from "../../tender/classifier";
@@ -15,7 +15,7 @@ const origin = "https://bidplus.gem.gov.in";
 // simultaneous regional searches against the public portal.
 let activeRequests = 0;
 const waitingRequests: (() => void)[] = [];
-async function gemRequest<T>(work: () => Promise<T>): Promise<T> {
+export async function gemRequest<T>(work: () => Promise<T>): Promise<T> {
   if (activeRequests >= 4) await new Promise<void>((resolve) => waitingRequests.push(resolve));
   else activeRequests++;
   try { return await work(); }
@@ -119,6 +119,29 @@ function retainUnlistedPublicHealthBuyer(raw: RawTender, organisation: string, o
   raw.buyer = [organisation, office].filter(Boolean).join(" — ").slice(0, 400);
   raw.notes!.push("Government healthcare buyer and regional scope verified in the matching GeM document; facility is not yet individually mapped in the institution directory.");
   return true;
+}
+
+/** National keyword results lack a state filter. Only document delivery/buyer
+ * evidence can locate them; a generic acronym such as GMCH is insufficient. */
+export function gemPriorityRegions(text: string): Region[] {
+  const organisation = buyerField(text, "Organisation Name", "Office Name");
+  const office = buyerField(text, "Office Name", "Contact details");
+  const consignees = [...text.matchAll(/Consignees\s*\/\s*Reporting Officer and Quantity([\s\S]*?)(?=Technical Specifications|Buyer Added Bid Specific|Consignees\s*\/\s*Reporting Officer and Quantity|$)/gi)].map((m) => m[1]).join(" ");
+  const locate = (value: string) => {
+    const named = regions.filter((region) => namesRegion(value, region));
+    if (/\b(?:new chandigarh|mullanpur|mohali|sas nagar)\b/i.test(value) && !named.includes("Punjab")) named.push("Punjab");
+    if (named.length) return named;
+    const normalized = " " + normalizeRegionName(value) + " ";
+    return [...new Set(institutions.filter((i) => [i.name, i.shortName, ...i.aliases].some((alias) => {
+      const key = normalizeRegionName(alias), city = normalizeRegionName(i.city);
+      return key.length > 10 && key.includes(city) && normalized.includes(" " + key + " ");
+    })).map((i) => i.region))];
+  };
+  const delivery = locate(consignees);
+  if (delivery.length) return delivery;
+  // A stated outside-region delivery is not replaced with a buyer headquarters.
+  if (/\b(?:delhi|maharashtra|gujarat|chhattisgarh|uttar pradesh|ladakh|assam|bihar|tamil nadu|kerala|karnataka|telangana|andhra pradesh|west bengal|odisha|madhya pradesh|rajasthan|jharkhand)\b/i.test(consignees)) return [];
+  return locate(`${organisation} ${office}`);
 }
 
 export function enrichGemBuyer(raw: RawTender, text: string): boolean {

@@ -55,7 +55,7 @@ function retainPartialGem(
   current: SourceFetchResult,
   previous?: SourceFetchResult,
 ): SourceFetchResult {
-  if (current.status !== "PARTIAL" || !/^gem-direct(?:-|$)/.test(current.sourceId) ||
+  if (current.status !== "PARTIAL" || !/^gem-(?:direct(?:-|$)|priority-keywords$)/.test(current.sourceId) ||
     previous?.sourceId !== current.sourceId) return current;
   const key = (record: RawTender) => record.tenderId?.trim().toUpperCase() ||
     record.id || record.tenderUrl;
@@ -105,7 +105,7 @@ async function perform(id: string): Promise<SourceFetchResult> {
         previousSnapshots.get(id) || (await readDurable(id)),
       );
     else {
-      if (result.status === "PARTIAL" && /^gem-direct(?:-|$)/.test(id))
+      if (result.status === "PARTIAL" && /^gem-(?:direct(?:-|$)|priority-keywords$)/.test(id))
         result = retainPartialGem(result,
           previousSnapshots.get(id) || (await readDurable(id)));
       remember(result);
@@ -120,7 +120,7 @@ function reader(id: string) {
   let fn = readers.get(id);
   if (!fn) {
     // Category-aware classification needs snapshots containing official NIC metadata.
-    fn = unstable_cache(async () => perform(id), ["medical-source-v10", id], {
+    fn = unstable_cache(async () => perform(id), ["medical-source-v11", id], {
       revalidate: ttl,
       tags: ["tender-source-" + id],
     });
@@ -166,7 +166,7 @@ export function invalidateSources(): void {
 export async function allSources() {
   const ids = adapters.map((a) => a.id);
   // Start long regional searches together; GeM retains its shared request pool.
-  const pending = [...ids].sort((a, b) => Number(b.startsWith("gem-direct")) - Number(a.startsWith("gem-direct")));
+  const pending = [...ids].sort((a, b) => Number(b.startsWith("gem-")) - Number(a.startsWith("gem-")));
   let next = 0;
   const results: SourceFetchResult[] = [];
   await Promise.all(

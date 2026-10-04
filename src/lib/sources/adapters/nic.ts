@@ -478,13 +478,18 @@ export function createNicAdapter(config: NicConfig): TenderSourceAdapter {
           return assigned && (medical || !!config.regionalHealthcare);
         });
         candidates.sort((a, b) => priorityRank(b) - priorityRank(a));
-        const detailLimit = config.detailLimit ?? 20;
+        const currentPriorityCount = candidates.filter((r) => priorityRank(r) >= 2).length;
+        // A routine cap must not exclude later priority equipment. The shared
+        // HTTP deadline still bounds work; incomplete metadata stays likely.
+        const detailLimit = Math.min(128, Math.max(config.detailLimit ?? 20, currentPriorityCount));
+        const priorityDocuments: { raw: RawTender; html: string; url: string }[] = [];
         if (candidates.length > detailLimit) {
           partial = true;
           notes.push(
             `${candidates.length - detailLimit} relevant detail checks deferred by the ${detailLimit}-detail limit.`,
           );
         }
+        let priorityMetadataChecks = 0;
         let next = 0;
         await Promise.all(
           Array.from(
@@ -498,6 +503,7 @@ export function createNicAdapter(config: NicConfig): TenderSourceAdapter {
                   const html = await http.text(sessionUrl(url));
                   let enriched = enrichNicDetail(raw, html, url);
                   metrics.detailChecks++;
+                  if (priorityRank(raw) >= 2) priorityMetadataChecks++;
                   let corrFailure = false;
                   const needed = (enriched.corrigenda || []).filter(
                     (c) =>
@@ -554,47 +560,8 @@ export function createNicAdapter(config: NicConfig): TenderSourceAdapter {
                         "Corrigendum verification incomplete; active status remains likely.",
                       ],
                     };
-                  if (
-                    !config.regionalHealthcare && (priorityCategories(enriched).length ||
-                    genericPriorityCandidate(enriched))
-                  ) {
-                    // Download links live on the explicitly linked full-detail page.
-                    // Use this listing session rather than an unrelated later cookie jar.
-                    try {
-                      const $detail = cheerio.load(html);
-                      const more = $detail(
-                        'a[href*="page=FrontEndTenderDetails"]',
-                      )
-                        .filter((_, a) =>
-                          /view more details/i.test($detail(a).text()),
-                        )
-                        .first()
-                        .attr("href");
-                      if (more) {
-                        const fullUrl = absolute(more, url);
-                        const fullHtml = await http.text(sessionUrl(fullUrl));
-                        if (
-                          cheerio
-                            .load(fullHtml)
-                            .root()
-                            .text()
-                            .includes(raw.tenderId!)
-                        ) {
-                          const exposed = linkedDocuments(fullHtml, fullUrl);
-                          enriched.documents = [
-                            ...(enriched.documents || []),
-                            ...exposed,
-                          ];
-                        }
-                      }
-                      await inspectPriorityTender(enriched, http);
-                    } catch {
-                      enriched.notes = [
-                        ...(enriched.notes || []),
-                        "Priority full-detail documents could not be inspected within the source budget.",
-                      ];
-                    }
-                  }
+                  if (!config.regionalHealthcare && (priorityCategories(enriched).length || genericPriorityCandidate(enriched)))
+                    priorityDocuments.push({ raw: enriched, html, url });
                   records[index] = enriched;
                 } catch (e) {
                   partial = true;
@@ -606,6 +573,52 @@ export function createNicAdapter(config: NicConfig): TenderSourceAdapter {
             },
           ),
         );
+        // Finish identity, dates and amendments for all selected candidates
+        // before any PDF/full-detail work consumes the remaining source budget.
+        let documentCursor = 0;
+        await Promise.all(Array.from({ length: Math.min(3, priorityDocuments.length) }, async () => {
+          while (documentCursor < priorityDocuments.length) {
+            const { raw: enriched, html, url } = priorityDocuments[documentCursor++];
+            const raw = enriched;
+            // Download links live on the explicitly linked full-detail page.
+            // Use this listing session rather than an unrelated later cookie jar.
+            try {
+              const $detail = cheerio.load(html);
+              const more = $detail(
+                'a[href*="page=FrontEndTenderDetails"]',
+              )
+                .filter((_, a) =>
+                  /view more details/i.test($detail(a).text()),
+                )
+                .first()
+                .attr("href");
+              if (more) {
+                const fullUrl = absolute(more, url);
+                const fullHtml = await http.text(sessionUrl(fullUrl));
+                if (
+                  cheerio
+                    .load(fullHtml)
+                    .root()
+                    .text()
+                    .includes(raw.tenderId!)
+                ) {
+                  const exposed = linkedDocuments(fullHtml, fullUrl);
+                  enriched.documents = [
+                    ...(enriched.documents || []),
+                    ...exposed,
+                  ];
+                }
+              }
+              await inspectPriorityTender(enriched, http);
+            } catch {
+              enriched.notes = [
+                ...(enriched.notes || []),
+                "Priority full-detail documents could not be inspected within the source budget.",
+              ];
+            }
+          }
+        }));
+        notes.push(`Priority metadata: ${priorityMetadataChecks}/${currentPriorityCount} current priority or opaque candidates had their official identity and date detail read; incomplete checks remain visible as partial coverage.`);
         notes.push(
           `Read ${links.length} matching official organisation chains without login or CAPTCHA bypass.`,
         );

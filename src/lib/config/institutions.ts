@@ -450,4 +450,5 @@ institutions.push(...regionalHealthcareInstitutions);
 for (const institution of institutions) {
   const source = gemSourceIds[institution.region];
   if (!institution.sourceIds.includes(source)) institution.sourceIds.push(source);
+  if (!institution.sourceIds.includes("gem-priority-keywords")) institution.sourceIds.push("gem-priority-keywords");
 }

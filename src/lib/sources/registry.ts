@@ -1,3 +1,4 @@
+import { gemPriorityAdapter } from "./adapters/gem-priority";
 import { regions } from "../config/regions";
 import { processPrioritySource, linkRetenders } from "../specification/enrich";
 import { createGemAdapter } from "./adapters/gem";
@@ -151,6 +152,7 @@ const baseAdapters: TenderSourceAdapter[] = [
   }),
   esicAdapter,
   cpppEsicAdapter,
+  gemPriorityAdapter,
   ...regions.map(createGemAdapter),
 ];
 export const adapters: TenderSourceAdapter[] = baseAdapters.map((adapter) => ({

@@ -575,7 +575,7 @@ export default function Dashboard() {
   );
   const stats = [
     {
-      name: "Institutions monitored",
+      name: "Institutions in directory",
       value: data?.institutions.length ?? "—",
       detail: `${new Set(data?.institutions.map((i) => i.region) ?? []).size} regions covered`,
     },
@@ -1011,7 +1011,7 @@ export default function Dashboard() {
                 <h2>The institution network</h2>
                 <p>
                   {data?.institutions.length ?? 0} institutions · counts from
-                  current cached tender records, including named consignees.
+                  directly matched notices and named consignees. Statewide purchases are listed separately; zero does not prove that a facility has no tender.
                 </p>
               </div>
             </div>
@@ -1025,6 +1025,8 @@ export default function Dashboard() {
                 const sources = data.sources.filter((s) =>
                   i.sourceIds.includes(s.sourceId),
                 );
+                const regionalBuying = tenders.filter((t) => t.procurementScope === "statewide" && !t.institutionId && t.region === i.region && active(t)).length;
+                const incomplete = !sources.length || sources.some((s) => s.status !== "SUCCESS" || s.stale);
                 return (
                   <article className="institution-card" key={i.id}>
                     <div className="institution-top">
@@ -1041,7 +1043,7 @@ export default function Dashboard() {
                     <div className="institution-counts">
                       <div>
                         <strong>{records.filter(active).length}</strong>
-                        <span>Active</span>
+                        <span>Direct active matches</span>
                       </div>
                       <div>
                         <strong>
@@ -1079,6 +1081,10 @@ export default function Dashboard() {
                         </span>
                       )}
                     </div>
+                    {!records.length && <p className="institution-note">
+                      No directly matched notice found.{incomplete ? " Source coverage is incomplete." : " No direct match was found in the sources checked."}
+                      {regionalBuying > 0 ? ` ${regionalBuying} active buying-body tenders are listed separately for ${i.region}; their individual delivery facilities may not be published.` : " A facility may procure through a central buying body rather than publish its own notice."}
+                    </p>}
                     {i.note && <p className="institution-note">{i.note}</p>}
                     <div className="institution-actions">
                       <button
@@ -1087,6 +1093,9 @@ export default function Dashboard() {
                       >
                         View opportunities →
                       </button>
+                      {regionalBuying > 0 && <button className="text-button" onClick={() => {
+                        reset(); setRegion(i.region); setScope("statewide"); setTab("opportunities");
+                      }}>Regional buying-body tenders ({regionalBuying}) →</button>}
                       <ExternalLink href={i.officialUrl}>
                         Official site
                       </ExternalLink>

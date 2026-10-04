@@ -80,7 +80,7 @@ export const PRIORITY_EQUIPMENT: {
     id: "PATIENT_MONITORS",
     label: "Patient monitors",
     categories: ["PATIENT_MONITORING"],
-    aliases: /\b(?:(?:patient|icu|bedside|multiparameter|multi[ -]?parameters?) monitors?|central (?:monitoring|nursing) stations?)\b/i,
+    aliases: /\b(?:(?:patient|icu|bedside|vital[ -]?signs?|multi[ -]?(?:parameter|para)s?) monitors?|central monitors?|central (?:monitoring|nursing) stations?)\b/i,
   },
   {
     id: "PATIENT_WARMING",
@@ -106,7 +106,7 @@ export const GENERIC_PRIORITY_SCOPE =
   /\b(?:(?:icu|critical[ -]care|life support|medical|respiratory|radiology|diagnostic imaging|imaging|ot|surgical|gastroenterology|urology|ent|emergency|resuscitation|crash cart|minimally invasive surgery) (?:equipment|equipments|package|systems?)|(?:hospital|critical care|medical) furniture)\b/i;
 export function genericPriorityCandidate(raw: RawTender): boolean {
   return (
-    GENERIC_PRIORITY_SCOPE.test(raw.title) &&
+    (GENERIC_PRIORITY_SCOPE.test(raw.title) || /^central monitor$/i.test(raw.title.trim())) &&
     !NONMEDICAL_PATTERNS.test(raw.title) &&
     !/\b(?:civil|construction|building|plumbing|hvac)\b/i.test(
       [raw.productCategory, raw.workCategory].filter(Boolean).join(" "),

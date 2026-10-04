@@ -30,7 +30,7 @@ export const MEDICAL_RULES: MedicalRule[] = [
   {
     category: "PATIENT_MONITORING",
     pattern:
-      /\b(?:patient monitor\w*|icu monitor\w*|multiparameter monitor\w*|multi[ -]?parameter(?:s)? monitor\w*|central (?:monitoring|nursing) station|telemetry|bedside monitor\w*|fetal monitor\w*|foetal monitor\w*|pulse oximeter\w*|capnograph\w*)\b/i,
+      /\b(?:patient monitor\w*|icu monitor\w*|multi[ -]?(?:parameter|para)(?:s)? monitor\w*|vital[ -]?sign(?:s)? monitor\w*|central (?:monitoring|nursing) station|telemetry|bedside monitor\w*|fetal monitor\w*|foetal monitor\w*|pulse oximeter\w*|capnograph\w*)\b/i,
   },
   {
     category: "VENTILATION",
@@ -116,7 +116,7 @@ export const MEDICAL_RULES: MedicalRule[] = [
   {
     category: "LAB_IVD",
     pattern:
-      /\b(?:ammonia kits? and controls[^\n]{0,80}\b(?:department of )?biochemistry|consumables for (?:the )?(?:department|deptt?\.?) of biochemistry|biochemistry reagent kits?|ivd|in[ -]vitro diagnostic\w*|biochemistry analy[sz]er\w*|hematology analy[sz]er\w*|haematology analy[sz]er\w*|laboratory centrifuge\w*|microscope\w*|elisa|pcr machine\w*|blood gas analy[sz]er\w*)\b/i,
+      /\b(?:ammonia kits? and controls[^\n]{0,80}\b(?:department of )?biochemistry|consumables for (?:the )?(?:department|deptt?\.?) of biochemistry|biochemistry reagent kits?|ivd|in[ -]vitro diagnostic\w*|biochemistry analy[sz]er\w*|hematology analy[sz]er\w*|haematology analy[sz]er\w*|laboratory centrifuge\w*|microscope\w*|elisa|pcr machine\w*|(?:blood gas|abg) analy[sz]er\w*)\b/i,
   },
   {
     category: "COAGULATION",
