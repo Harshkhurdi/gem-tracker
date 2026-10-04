@@ -126,13 +126,15 @@ export class SourceHttp {
       let incoming: Awaited<ReturnType<typeof httpRequest>> | undefined;
       for (let attempt = 0; attempt < 2; attempt++) {
         try {
+          init.signal?.throwIfAborted();
           const left = this.deadline - Date.now();
           if (left <= 0) throw Error("Source time budget exceeded");
           incoming = await httpRequest(url, {
             method: (init.method || "GET") as "GET" | "POST",
             headers: Object.fromEntries(headers.entries()),
             body,
-            signal: AbortSignal.timeout(Math.min(left, this.timeout)),
+            signal: init.signal ? AbortSignal.any([init.signal, AbortSignal.timeout(Math.min(left, this.timeout))])
+              : AbortSignal.timeout(Math.min(left, this.timeout)),
             ...(dispatcher ? { dispatcher } : {}),
           });
           if (
@@ -148,6 +150,7 @@ export class SourceHttp {
         } catch (error) {
           if (
             attempt ||
+            init.signal?.aborted ||
             init.method === "POST" ||
             this.deadline - Date.now() < 2000
           )

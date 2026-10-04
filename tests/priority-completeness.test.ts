@@ -1,3 +1,4 @@
+import { clearGemBuyerDocumentCache } from "../src/lib/sources/gem-buyer-documents";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { priorityCategories } from "../src/lib/config/priority-equipment";
 import { classifyMedical } from "../src/lib/tender/classifier";
@@ -6,7 +7,7 @@ import { gemPriorityRegions } from "../src/lib/sources/adapters/gem";
 import { gemPriorityAdapter, PRIORITY_KEYWORD_GROUPS } from "../src/lib/sources/adapters/gem-priority";
 import { SourceHttp } from "../src/lib/sources/http";
 import * as enrichment from "../src/lib/specification/enrich";
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => { vi.restoreAllMocks(); clearGemBuyerDocumentCache(); });
 describe("priority completeness safeguards", () => {
   it.each(["HIGH END MULTIPARA MONITOR", "Vital Sign Monitor", "Multipara Monitor with invasive blood monitoring system with transducers"])("accepts the official clinical monitor title %s", (title) => {
     expect(priorityCategories({ title })).toContain("PATIENT_MONITORS");

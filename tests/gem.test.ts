@@ -1,3 +1,4 @@
+import { clearGemBuyerDocumentCache } from "../src/lib/sources/gem-buyer-documents";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createGemAdapter,
@@ -48,7 +49,7 @@ function mockSearch(pages: Record<number, string | Error>, region: Region = "Cha
 }
 
 describe("official GeM regional discovery", () => {
-  afterEach(() => vi.restoreAllMocks());
+  afterEach(() => { vi.restoreAllMocks(); clearGemBuyerDocumentCache(); });
 
   it("walks every reported regional page and finds priority bids beyond page one", async () => {
     const pages = Array.from({ length: 21 }, (_, i) => doc(String(7885248 + i), String(9718972 + i)));
@@ -280,7 +281,8 @@ describe("official GeM regional discovery", () => {
     });
     const pdfChecks=vi.spyOn(SourceHttp.prototype,'documentText').mockResolvedValue(pdf(known));
     const result=await createGemAdapter('Chandigarh').fetch();
-    expect(supplementalCalls).toBe(24);expect(Math.max(...queriedPages)).toBe(8);
+    expect(supplementalCalls).toBe(24);expect(Math.max(...queriedPages)).toBeLessThanOrEqual(8);
+    expect(queriedPages.slice(0,6)).toEqual([1,1,1,1,1,1]);
     expect(result.status).toBe('PARTIAL');expect(result.records).toHaveLength(1);
     expect(pdfChecks).toHaveBeenCalledTimes(1);
     expect(result.notes.join(' ')).toContain('24/24 supplemental requests');
@@ -310,7 +312,7 @@ describe("official GeM regional discovery", () => {
     expect(result.notes.join(" ")).toContain("3/24 supplemental requests used");
   });
 
-  it("does not add organisation traffic after exhausting the shared 400-request search limit",async()=>{
+  it("attempts healthcare discovery before general pages and still caps result searches at 400",async()=>{
     const nonmedical=doc('7885248','9718972','Office chairs');let searches=0,lookups=0;
     vi.spyOn(SourceHttp.prototype,'text').mockImplementation(async(url,init)=>{
       if(url===GEM_SEARCH_PAGE)return pageHtml;
@@ -319,7 +321,7 @@ describe("official GeM regional discovery", () => {
       searches++;return response([nonmedical],4100,(q.page-1)*10);
     });
     const result=await createGemAdapter('Chandigarh').fetch();
-    expect(searches).toBe(400);expect(lookups).toBe(0);expect(result.status).toBe('PARTIAL');expect(result.records).toEqual([]);
+    expect(searches).toBe(400);expect(lookups).toBe(1);expect(result.status).toBe('PARTIAL');expect(result.records).toEqual([]);
   });
 
   it("reports a changed search schema unavailable instead of a successful empty result", async () => {

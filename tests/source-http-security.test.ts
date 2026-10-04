@@ -59,3 +59,27 @@ describe("PGIMER dispatcher redirect isolation", () => {
     expect(request.mock.calls[1][1].dispatcher).not.toBe(request.mock.calls[0][1].dispatcher);
   });
 });
+
+describe("priority listing phase cancellation", () => {
+  it("does not issue a request for an already aborted phase", async () => {
+    const controller=new AbortController();controller.abort(new Error("listing phase expired"));
+    await expect(new SourceHttp().text("https://hptenders.gov.in/list",{signal:controller.signal})).rejects.toThrow("listing phase expired");
+    expect(request).not.toHaveBeenCalled();
+  });
+  it("aborts an in-flight listing without retry and keeps its session for priority details", async () => {
+    const http=new SourceHttp();
+    request.mockResolvedValueOnce(reply(200,{"set-cookie":"session=fixture"}));
+    await http.text("https://hptenders.gov.in/index");
+    const controller=new AbortController();
+    request.mockImplementationOnce((_url,options)=>new Promise((_resolve,reject)=>{
+      options.signal.addEventListener("abort",()=>reject(options.signal.reason),{once:true});
+    }));
+    const listing=http.text("https://hptenders.gov.in/list",{signal:controller.signal});
+    controller.abort(new Error("listing phase expired"));
+    await expect(listing).rejects.toThrow("listing phase expired");
+    expect(request).toHaveBeenCalledTimes(2);
+    request.mockResolvedValueOnce(reply(200,{},"priority detail"));
+    expect(await http.text("https://hptenders.gov.in/detail")).toBe("priority detail");
+    expect(request.mock.calls[2][1].headers.cookie).toBe("session=fixture");
+  });
+});

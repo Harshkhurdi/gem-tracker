@@ -131,6 +131,9 @@ export function priorityCategories(
   // Compatibility and place-of-use requirements describe the purchased item's
   // surroundings, not additional imaging devices in the procurement.
   const imagingScope = scope
+    // Laser Doppler measures optical microcirculation, not ultrasound. Remove
+    // only this modality so a separate ultrasound purchase in a BOQ survives.
+    .replace(/\blaser[ -]?doppler\b/gi, " ")
     // Remove the modality used as a compatibility adjective (C-arm compatible
     // table), while retaining actual devices with unrelated DICOM compatibility.
     .replace(/\b(?:c[ -]?arms?|(?:digital )?x[ -]?rays?|(?:mobile|portable) dr|digital radiograph\w*|flat[ -]panel detectors?|(?:digital )?mammograph\w*|ultrasound|colou?r doppler)(?:\s+(?:systems?|machines?|units?|devices?))?\s+compatib(?:le|ility)\b(?!\s+with\b)/gi, " ")
