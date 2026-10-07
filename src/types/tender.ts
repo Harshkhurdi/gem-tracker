@@ -100,7 +100,20 @@ export interface ProcurementCategories {
   procurementCategory?: string;
   workCategory?: string;
 }
+/** Explicit source-declared equipment lines, kept separate from category inference. */
+export interface TenderEquipmentItem {
+  id?: string;
+  name: string;
+  quantity?: number | string | null;
+  category?: string;
+  sourceUrl?: string;
+  sourceLabel?: string;
+  sourcePage?: number;
+  sourceSheet?: string;
+  sourceRow?: number;
+}
 export interface RawTender extends ProcurementCategories {
+  equipmentItems?: TenderEquipmentItem[];
   id?: string;
   title: string;
   description?: string;

@@ -1,0 +1,13 @@
+import {beforeEach,afterEach,it,expect,vi} from 'vitest';
+import {mkdtemp,readFile,writeFile,rm,stat} from 'node:fs/promises';
+import {tmpdir} from 'node:os';import path from 'node:path';
+vi.mock('server-only',()=>({}));
+import {savePreview,readPreview,removePreview,cleanupPreviews} from '@/lib/medops/previews';
+import type {DiscoveryTender} from '@/lib/medops/mapping';
+let directory:string;
+const tender:DiscoveryTender={externalTenderId:'a'.repeat(20),title:'Synthetic local public-source snapshot',sourceUrl:'https://hospital.gov.in/source',sourceName:'Fixture source',discoveredAt:'2026-10-07T10:00:00Z',items:[{id:'one',equipment:'Ventilator',quantity:2}],documents:[],revisions:[],references:[]};
+beforeEach(async()=>{directory=await mkdtemp(path.join(tmpdir(),'tracker-private-preview-'));vi.stubEnv('MEDOPS_LOCAL_RECEIPT_PATH',directory);vi.stubEnv('BLOB_READ_WRITE_TOKEN','');vi.stubEnv('MEDOPS_API_URL','http://localhost:3000');vi.stubEnv('APP_URL','http://localhost:3001');vi.stubEnv('MEDOPS_INTEGRATION_SECRET','x'.repeat(48));vi.stubEnv('INTEGRATION_ENVIRONMENT','development');});
+afterEach(async()=>{await rm(directory,{recursive:true,force:true});vi.unstubAllEnvs();});
+it('persists the exact source snapshot privately and binds it to the employee grant',async()=>{const id=await savePreview(tender,'f'.repeat(64),'g'.repeat(43));const snapshot=await readPreview(id,'g'.repeat(43));expect(snapshot.tender).toEqual(tender);expect(snapshot.fingerprint).toBe('f'.repeat(64));await expect(readPreview(id,'h'.repeat(43))).rejects.toThrow('Reconnect');const file=path.join(directory,'tracker-medops/previews',id+'.json');expect((await stat(file)).mode&0o777).toBe(0o600);expect(await readFile(file,'utf8')).not.toContain('g'.repeat(43));});
+it('expires preview snapshots and removes confirmed previews without altering source records',async()=>{const id=await savePreview(tender,'f'.repeat(64),'g'.repeat(43));const file=path.join(directory,'tracker-medops/previews',id+'.json');const value=JSON.parse(await readFile(file,'utf8'));value.expires=Date.now()-1;await writeFile(file,JSON.stringify(value));await expect(readPreview(id,'g'.repeat(43))).rejects.toThrow('expired');await expect(stat(file)).rejects.toMatchObject({code:'ENOENT'});const next=await savePreview(tender,'f'.repeat(64),'g'.repeat(43));await removePreview(next);await expect(readPreview(next,'g'.repeat(43))).rejects.toThrow('expired');await cleanupPreviews();});
+it('rejects unsafe storage keys and production filesystem fallback',async()=>{await expect(readPreview('../other','g'.repeat(43))).rejects.toThrow('valid tender preview');vi.stubEnv('NODE_ENV','production');await expect(savePreview(tender,'f'.repeat(64),'g'.repeat(43))).rejects.toThrow('Private preview storage');});

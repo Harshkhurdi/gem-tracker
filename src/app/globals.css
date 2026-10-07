@@ -1180,3 +1180,9 @@ footer {
 .specification-grid section {
   min-width: 0;
 }
+
+.medops-handoff { margin: 1rem 0; border-top: 1px solid var(--border, #dce3ec); padding-top: .8rem; }
+.medops-preview { padding: 1rem; margin-top: .8rem; border: 1px solid #97b8da; border-radius: .6rem; background: #f7faff; color: #152d48; }
+.medops-item { display: flex; align-items: flex-start; gap: .6rem; padding: .5rem 0; }
+.medops-item input { margin-top: .3rem; flex-shrink: 0; }
+.medops-handoff button { padding: .45rem .7rem; }

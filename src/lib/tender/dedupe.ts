@@ -169,6 +169,7 @@ export function deduplicate(tenders: Tender[], now = new Date()): {
     result[index] = {
       ...best,
       description: best.description || other.description,
+      equipmentItems: best.equipmentItems?.length ? best.equipmentItems : other.equipmentItems,
       specification: best.specification?.documentSources.some(
         (d) => d.status === "parsed",
       )

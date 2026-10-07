@@ -16,6 +16,7 @@
     "node": ">=22.13.0"
   },
   "dependencies": {
+    "@vercel/blob": "^2.8.1",
     "cheerio": "1.2.0",
     "exceljs": "^4.4.0",
     "fflate": "^0.8.3",

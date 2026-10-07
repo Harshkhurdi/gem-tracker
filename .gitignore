@@ -8,3 +8,5 @@ out/
 coverage/
 *.log
 live-validation.json
+
+.local-receipts/

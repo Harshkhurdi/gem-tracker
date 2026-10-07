@@ -1,5 +1,6 @@
 "use client";
 import { regions } from "@/lib/config/regions";
+import SendToMedOps from "../medops/SendToMedOps";
 import Specifications from "./Specifications";
 import DocumentLinks from "./DocumentLinks";
 import { descriptionExcerpt, displaySourceText } from "@/lib/tender/display-text";
@@ -168,6 +169,7 @@ function TenderRows({
                     </dl>
                   )}
                   <Specifications tender={t} />
+                  <SendToMedOps id={t.id} />
                   {t.originalClosingDate && (
                     <p>
                       Original deadline: {date(t.originalClosingDate)}
