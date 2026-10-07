@@ -1,0 +1,8 @@
+.git/
+.env*
+.local-receipts/
+node_modules/
+.next/
+coverage/
+*.log
+*.tsbuildinfo
