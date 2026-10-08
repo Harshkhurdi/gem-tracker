@@ -7,7 +7,7 @@ export const STATE_COOKIE=process.env.NODE_ENV==='production'?'__Host-tracker-me
 export function config(){
  const medops=process.env.MEDOPS_API_URL,tracker=process.env.APP_URL,secret=process.env.MEDOPS_INTEGRATION_SECRET,environment=process.env.INTEGRATION_ENVIRONMENT;
  if(!medops||!tracker||!secret||secret.length<32||!['production','development','preview'].includes(environment??''))throw new HandoffError(503,'MedOps handoff is not configured. Discovery remains available.');
- for(const value of [medops,tracker]){const u=new URL(value);if(u.username||u.password||u.pathname!=='/'||u.search||u.hash||(environment==='production'&&u.protocol!=='https:')||(environment==='development'&&!['localhost','127.0.0.1'].includes(u.hostname)))throw new HandoffError(503,'MedOps integration environment is not valid');}
+ for(const value of [medops,tracker]){const u=new URL(value);if(!['http:','https:'].includes(u.protocol)||u.username||u.password||u.pathname!=='/'||u.search||u.hash||(environment!=='development'&&u.protocol!=='https:')||(environment==='development'&&!['localhost','127.0.0.1'].includes(u.hostname)))throw new HandoffError(503,'MedOps integration environment is not valid');}
  if(process.env.VERCEL_ENV&&process.env.VERCEL_ENV!==environment)throw new HandoffError(503,'MedOps handoff is disabled in this environment');
  return {medops:new URL(medops).origin,tracker:new URL(tracker).origin,secret,environment:environment!};
 }
@@ -29,3 +29,5 @@ export async function medopsRequest(path:string,data:unknown){
 }
 export async function api(fn:()=>Promise<Response>){try{const r=await fn();r.headers.set('Cache-Control','private, no-store');return r;}catch(e){return Response.json({error:e instanceof HandoffError?e.message:'The handoff could not be completed. Try again.'},{status:e instanceof HandoffError?e.status:503,headers:{'Cache-Control':'private, no-store'}});}}
 export async function smallJson(req:Request){if(!req.headers.get('content-type')?.includes('application/json'))throw new HandoffError(415,'Use application/json');const reader=req.body?.getReader();if(!reader)throw new HandoffError(400,'Request body is missing');const chunks:Uint8Array[]=[];let n=0;while(true){const {value,done}=await reader.read();if(done)break;n+=value.length;if(n>12000){await reader.cancel();throw new HandoffError(413,'Handoff request is too large');}chunks.push(value);}try{return JSON.parse(Buffer.concat(chunks).toString());}catch{throw new HandoffError(400,'Invalid JSON');}}
+
+export async function clearCookie(name:string){(await cookies()).set(name,'',{httpOnly:true,secure:process.env.NODE_ENV==='production',sameSite:'strict',path:'/',maxAge:0});}

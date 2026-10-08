@@ -14,3 +14,5 @@ describe('minimal discovery mapping',()=>{
 });
 
 it('retains available structured source items when deduplication chooses a current generic mirror',()=>{const original={...t,tenderId:'SAME-1',equipmentItems:[{id:'1',name:'Ventilator',quantity:2},{id:'2',name:'Monitor',quantity:3}]};const mirror={...t,id:'b'.repeat(20),tenderId:'SAME-1',checkedAt:'2026-10-07T11:00:00Z'};expect(deduplicate([original,mirror]).tenders[0].equipmentItems).toHaveLength(2);});
+
+it('keeps date-only closing deadlines at the end of the Indian day in handoffs and revisions',()=>{const mapped=mapDiscovery({...t,effectiveClosingDate:'2026-11-01',corrigenda:[{revisedClosingDate:'2026-11-02'}]},'https://tracker.example');expect(mapped.deadline).toBe('2026-11-01T18:29:59.999Z');expect(mapped.revisions[0].revisedClosingDate).toBe('2026-11-02T18:29:59.999Z');});

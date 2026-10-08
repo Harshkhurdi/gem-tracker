@@ -26,6 +26,23 @@ export async function readPreview(id:string,grant:string){
 }
 export async function removePreview(id:string){if(process.env.BLOB_READ_WRITE_TOKEN)await del(key(id));else await unlink(local(key(id)));}
 export async function cleanupPreviews(){
- if(process.env.BLOB_READ_WRITE_TOKEN){const page=await list({prefix,limit:100});const expired=page.blobs.filter(b=>Date.now()-b.uploadedAt.getTime()>600000);if(expired.length)await del(expired.map(b=>b.url));}
- else{const dir=local(prefix);let files:string[];try{files=await readdir(dir);}catch(e){if((e as NodeJS.ErrnoException).code==='ENOENT')return;throw e;}for(const file of files.slice(0,100)){if(!/^[A-Za-z0-9_-]{43}\.json$/.test(file))continue;const full=path.join(dir,file);if(Date.now()-(await stat(full)).mtimeMs>600000)await unlink(full);}}
+ const now=Date.now();
+ if(process.env.BLOB_READ_WRITE_TOKEN){
+  let cursor:string|undefined;
+  do{
+   const page=await list({prefix,limit:100,cursor});
+   const expired=page.blobs.filter(b=>now-b.uploadedAt.getTime()>600000);
+   if(expired.length)await del(expired.map(b=>b.url));
+   cursor=page.hasMore?page.cursor:undefined;
+  }while(cursor);
+ }else{
+  const dir=local(prefix);let files:string[];
+  try{files=await readdir(dir);}catch(e){if((e as NodeJS.ErrnoException).code==='ENOENT')return;throw e;}
+  for(const file of files){
+   if(!/^[A-Za-z0-9_-]{43}\.json$/.test(file))continue;
+   const full=path.join(dir,file);
+   try{if(now-(await stat(full)).mtimeMs>600000)await unlink(full);}
+   catch(e){if((e as NodeJS.ErrnoException).code!=='ENOENT')throw e;}
+  }
+ }
 }
